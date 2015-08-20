@@ -20,14 +20,16 @@ db_proxy = Proxy()
 
 class AddrMapping(Model):
 
-    encoded_addr = CharField(null=False, max_length=255, index=True, primary_key=True)
-    addr         = CharField(null=False, max_length=255, index=True, unique=True)
+    encoded_addr = CharField(null=False, max_length=255, index=True, unique=True)
+    addr         = CharField(null=False, max_length=255)
+    action_uuid  = CharField(null=False, max_length=36)
     created      = IntegerField(null=False)
     name         = CharField(null=True, max_length=255)
 
     class Meta:
         database = db_proxy
         db_table = 'email_address_mapping'
+        primary_key = CompositeKey('addr', 'action_uuid')
 
 
 class DMARCMilter(Milter.Base):
@@ -36,15 +38,22 @@ class DMARCMilter(Milter.Base):
         for message in msg:
             self.config.logger.info(message)
 
+    # encode an email address
+    # expects that self.x_mail_domain and self.x_action_uuid is set
+    # @param address pure email address used for encoding/lookup
+    # @param address_orig email address that might include the persons
+    #        name in a comment
     def encodeAddress(self, address, address_orig):
         encoded_address = ''
         name            = None
+        mapping         = None
 
+        # extract the persons name from the original email address
         match = self.config.name_regex.search(address_orig)
         if match:
             name = match.group(1).strip().replace('"', '')
 
-        # if we have a name of the person from the comment of the mail address,
+        # if we have the name of the person from the comment of the mail address,
         # use it to extract first name + last name and try to build the encoded
         # address as "firstname.lastname.randomstring@mail-domain.tld"
         #  "firstname.lastname.randomstring" must not be longer than 64 characters
@@ -63,66 +72,58 @@ class DMARCMilter(Milter.Base):
         encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.x_mail_domain
 
         self.config.logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address, encoded_address))
-        try:
-            mapping = AddrMapping.create(
-                encoded_addr=encoded_address,
-                addr=address,
-                created=int(time.time()),
-                name=name)
-        except Exception as excpt:
-            self.config.logger.error("Inserting new encoded address in DB failed: original address \"{0}\", encoded address \"{1}\".".format(address, encoded_address))
-            self.config.logger.exception("Peewee Error: ", excpt)
 
-        return (encoded_address, name)
+        return AddrMapping.create(
+            encoded_addr=encoded_address,
+            addr=address,
+            action_uuid=self.x_action_uuid,
+            created=int(time.time()),
+            name=name)
 
     def getDecodedAddress(self, address):
         mapping = None
         try:
             mapping = AddrMapping.get(AddrMapping.encoded_addr == address)
             if mapping:
-                self.config.logger.debug("Looked up address \"{0}\", found \"{1}\".".format(address, dec_addr))
+                self.config.logger.debug("Looked up address \"{0}\", found \"{1}\".".format(address, mapping.addr))
         except AddrMapping.DoesNotExist as excpt:
             self.config.logger.debug("Encoded address \"{0}\" wasn't found in lookup table.".format(address))
-        except Exception as excpt:
-            self.config.logger.error("Error while looking up encoded address \"{0}\"".format(address))
-            self.config.logger.exception("Exception: ", excpt)
 
         return mapping
 
+    # expects that self.x_action_uuid is set
     def getEncodedAddressAndName(self, address):
-        enc_addr_and_name = None
+        mapping = None
         try:
-            mapping = AddrMapping.get(AddrMapping.addr == address)
+            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == self.x_action_uuid)
             if mapping:
-                enc_addr_and_name = (mapping.encoded_addr, mapping.name)
-                self.config.logger.debug("Looked up address \"{0}\", found address \"{1}\" and name \"{2}\".".format(address, enc_addr_and_name[0], enc_addr_and_name[1]))
+                self.config.logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, self.x_action_uuid, mapping.encoded_addr, mapping.name))
 
         except AddrMapping.DoesNotExist as excpt:
-            self.config.logger.debug("Address \"{0}\" wasn't found in lookup table.".format(address))
-        except Exception as excpt:
-            self.config.logger.error("Error while looking up decoded address \"{0}\"".format(address))
-            self.config.logger.exception("Exception: ", excpt)
+            self.config.logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, self.x_action_uuid))
 
-        return enc_addr_and_name
+        return mapping
 
     # change header and envelope "To" fields
-    def changeMailToAddress(self, address, address_with_name):
+    def changeMailToAddress(self, envlp_address, address_with_name):
         self.chgheader('To', 1, address_with_name)
-        self.addrcpt(address)
+        self.addrcpt(envlp_address)
         self.delrcpt(self.envlp_to_address)
+        self.envlp_to_address = envlp_address
+        self.config.logger.debug("Changed header \"To\" address to \"{0}\", changed envelope \"To\" address to \"{1}\".".format(address_with_name, envlp_address))
 
     # take the existing header "From" field and encode it
+    # expects that self.x_mail_domain and self.x_action_uuid is set
     def encodeMailFromAddress(self, return_path=None):
-        enc_addr_and_name = self.getEncodedAddressAndName(self.hdr_from_address)
-        if not enc_addr_and_name:
-            enc_addr_and_name = self.encodeAddress(self.hdr_from_address, self.hdr_from_address_orig)
+        mapping = self.getEncodedAddressAndName(self.hdr_from_address)
+        if not mapping:
+            mapping = self.encodeAddress(self.hdr_from_address, self.hdr_from_address_orig)
 
         enc_addr_with_name = None
-        enc_addr           = enc_addr_and_name[0]
-        if len(enc_addr_and_name[1]) > 0:
-            enc_addr_with_name = '"' + enc_addr_and_name[1] + '" <' + enc_addr_and_name[0] + '>'
+        if len(mapping.name) > 0:
+            enc_addr_with_name = '"' + mapping.name + '" <' + mapping.encoded_addr + '>'
         
-        self.changeMailFromAddress(enc_addr, enc_addr_with_name, return_path)
+        self.changeMailFromAddress(mapping.encoded_addr, enc_addr_with_name, return_path)
         
     # change header "From" field
     # change envelope "MAIL FROM" field when a return path is given
@@ -151,6 +152,7 @@ class DMARCMilter(Milter.Base):
         self.hdr_from_address_orig = None
         self.hdr_to_address        = None
         self.x_mail_domain         = None
+        self.x_action_uuid         = None
         self.id                    = Milter.uniqueID()
         self.config                = config
 
@@ -192,6 +194,7 @@ class DMARCMilter(Milter.Base):
     #  - "To:"
     #  - "From:"
     #  - "X-Mail-Domian:"
+    #  - "X-Action-UUID:"
     def header(self, field, value):
         field = field.lower()
         if field == 'to':
@@ -200,7 +203,7 @@ class DMARCMilter(Milter.Base):
                 self.hdr_to_address = match.group(1)
                 self.config.logger.debug("Header \"To\" address: \"{0}\".".format(self.hdr_to_address))
             else:
-                self.config.logger.error("Can't extract email address from header \"To:\" content: \"{0}\"".format(value.lower()))
+                self.config.logger.error("Can't extract email address from header \"To:\" field: \"{0}\"".format(value.lower()))
                 return Milter.REJECT
 
         elif field == 'from':
@@ -210,7 +213,7 @@ class DMARCMilter(Milter.Base):
                 self.hdr_from_address = match.group(1)
                 self.config.logger.debug("Header \"From\" address: \"{0}\".".format(self.hdr_from_address))
             else:
-                self.config.logger.error("Can't extract email address from header \"From:\" content: \"{0}\"".format(value.lower()))
+                self.config.logger.error("Can't extract email address from header \"From:\" field: \"{0}\"".format(value.lower()))
                 return Milter.REJECT
 
             if self.is_internal_host:
@@ -226,54 +229,72 @@ class DMARCMilter(Milter.Base):
             self.x_mail_domain = value.lower()
             self.config.logger.debug("Header \"X-Mail-Domain\" domain: \"{0}\".".format(self.x_mail_domain))
 
+        elif field == 'x-action-uuid':
+            self.x_action_uuid = value.lower()
+            self.config.logger.debug("Header \"X-Action-UUID\": \"{0}\".".format(self.x_action_uuid))
+
         return Milter.CONTINUE
 
 
     # for mails from internal hosts:
     #   - check if domain in header "From:" field is a hosted domain
-    #   - if not, generate an encoded address, set it in the "From:" field an save it in the lookup table
     #   - if not and "X-Mail-Domain" field is not set -> quarantine
+    #   - if not and "X-Action-UUID" field is not set -> quarantine
+    #   - generate an encoded address, set it in the "From:" field an save it in the lookup table
     # for mails from external hosts:
     #   - do a lookup of the "To:" address whether there is a address mapping
     #   - if yes, change the "To:" and "From:" addresses and forward the mail
     def eom(self):
-        if self.is_internal_host:
-            if self.hdr_from_domain not in self.config.hosted_domains:
-                if not self.x_mail_domain:
-                    self.quarantine("DMARCMilter: header \"From\" domain is not one of the hosted domains! Quarantined!")
-                    self.config.logger.warning("Header \"From\" domain \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.hdr_from_domain))
-                    return Milter.TEMPFAIL
-                elif self.x_mail_domain not in self.config.hosted_domains:
-                    self.quarantine("DMARCMilter: domain from \"X-Mail-Domain\" is not one of the hosted domains! Quarantined!")
-                    self.config.logger.warning("Domain from \"X-Mail-Domain\" = \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.x_mail_domain))
+        try:
+            if self.is_internal_host:
+                if self.hdr_from_domain not in self.config.hosted_domains:
+                    if not self.x_mail_domain:
+                        self.quarantine("DMARCMilter: header \"From\" domain is not one of the hosted domains and no \"X-Mail-Domain\" header set! Quarantined!")
+                        self.config.logger.warning("Header \"From\" domain \"{0}\" is not one of the hosted domains and no \"X-Mail-Domain\" header set. Mail is quarantined!".format(self.hdr_from_domain))
+                        return Milter.TEMPFAIL
+                    elif not self.x_action_uuid:
+                        self.quarantine("DMARCMilter: header \"From\" domain is not one of the hosted domains and no \"X-Action-UUID\" header set! Quarantined!")
+                        self.config.logger.warning("Header \"From\" domain \"{0}\" is not one of the hosted domains and no \"X-Action-UUID\" header set. Mail is quarantined!".format(self.hdr_from_domain))
+                        return Milter.TEMPFAIL
+                    elif self.x_mail_domain not in self.config.hosted_domains:
+                        self.quarantine("DMARCMilter: domain from \"X-Mail-Domain\" is not one of the hosted domains! Quarantined!")
+                        self.config.logger.warning("Domain from \"X-Mail-Domain\" = \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.x_mail_domain))
+                        return Milter.TEMPFAIL
+                    else:
+                        self.encodeMailFromAddress()
+                        # remove auxiliary header fields
+                        self.chgheader('X-Mail-Domain', 1, None)
+                        self.chgheader('X-Action-UUID', 1, None)
+
+                if self.hdr_from_domain != self.envlp_from_domain:
+                    self.quarantine("DMARCMilter: header \"From\" domain is not the same as envelope \"From\" domain! Quarantined!")
+                    self.config.logger.warning("Header \"From\" domain \"{0}\" is not the same as envelope \"From\" domain \"{1}\". Mail is quarantined!".format(self.hdr_from_domain, self.envlp_from_domain))
                     return Milter.TEMPFAIL
                 else:
-                    self.encodeMailFromAddress()
-                    self.chgheader('X-Mail-Domain', 1, None)
+                    self.config.logger.debug("Mail with \"From\" domain \"{0}\" was accepted for sending.".format(self.hdr_from_domain))
 
-            if self.hdr_from_domain != self.envlp_from_domain:
-                self.quarantine("DMARCMilter: header \"From\" domain is not the same as envelope \"From\" domain! Quarantined!")
-                self.config.logger.warning("Header \"From\" domain \"{0}\" is not the same as envelope \"From\" domain \"{1}\". Mail is quarantined!".format(self.hdr_from_domain, self.envlp_from_domain))
-                return Milter.TEMPFAIL
+                # remove Sender field as it contains the non encoded address and we don't need it anyway.
+                self.chgheader('Sender', 1, None)
+
             else:
-                self.config.logger.debug("Mail with \"From\" domain \"{0}\" was accepted for sending.".format(self.hdr_from_domain))
+                mapping = self.getDecodedAddress(self.hdr_to_address)
+                if mapping:
+                    new_to_addr = ''
+                    if mapping.name:
+                        new_to_addr = '"' + mapping.name + '" <' + mapping.addr + '>'
+                    else:
+                        new_to_addr = mapping.addr
+                    self.changeMailToAddress(mapping.addr, new_to_addr)
+                    self.x_mail_domain = self.hdr_to_address[self.hdr_to_address.rindex('@') + 1:]
+                    self.x_action_uuid = mapping.action_uuid
+                    # we are forwarding mail: we need to change the envelope Return-Path.
+                    return_path = self.config.return_paths[self.x_mail_domain]
+                    self.encodeMailFromAddress(return_path)
 
-            # remove Sender field as it contains the non encoded address and we don't need it anyway.
-            self.chgheader('Sender', 1, None)
-
-        else:
-            addr_and_name = self.getDecodedAddress(self.hdr_to_address)
-            if addr_and_name:
-                new_to_addr = ''
-                if addr_and_name.name:
-                    new_to_addr = '"' + addr_and_name.name + '" <' + addr_and_name.addr + '>'
-                else:
-                    new_to_addr = addr_and_name.addr
-                self.x_mail_domain = self.hdr_to_address[self.hdr_to_address.rindex('@') + 1:]
-                # we are forwarding mail: we need to change the envelope Return-Path.
-                return_path = self.config.return_paths[self.x_mail_domain]
-                self.changeMailToAddress(addr_and_name.addr, new_to_addr)
-                self.encodeMailFromAddress(return_path)
+        except Exception as excpt:
+            self.config.logger.error("Exception while processing mail! Rejecting mail!")
+            self.config.logger.exception("Exception: ", excpt)
+            return Milter.REJECT
 
         return Milter.ACCEPT
 
