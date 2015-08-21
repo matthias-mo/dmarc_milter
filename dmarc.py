@@ -59,7 +59,7 @@ class DMARCMilter(Milter.Base):
         #  "firstname.lastname.randomstring" must not be longer than 64 characters
         if name and len(name) > 0:
             name_split = name.split(' ')
-            if len(name_split) > 0:
+            if name_split and len(name_split) > 0:
                 if len(name_split[0]) > 0 and len(name_split[0]) <= 52:
                     # we got a first name, start building the encoded address
                     encoded_address = name_split[0].lower() + "."
@@ -120,7 +120,7 @@ class DMARCMilter(Milter.Base):
             mapping = self.encodeAddress(self.hdr_from_address, self.hdr_from_address_orig)
 
         enc_addr_with_name = None
-        if len(mapping.name) > 0:
+        if mapping.name and len(mapping.name) > 0:
             enc_addr_with_name = '"' + mapping.name + '" <' + mapping.encoded_addr + '>'
         
         self.changeMailFromAddress(mapping.encoded_addr, enc_addr_with_name, return_path)
@@ -290,6 +290,7 @@ class DMARCMilter(Milter.Base):
                     # we are forwarding mail: we need to change the envelope Return-Path.
                     return_path = self.config.return_paths[self.x_mail_domain]
                     self.encodeMailFromAddress(return_path)
+                    self.chgheader('DKIM-Signature', 1, None)
 
         except Exception as excpt:
             self.config.logger.error("Exception while processing mail! Rejecting mail!")
