@@ -277,7 +277,7 @@ class DMARCMilterTest(TestCase):
 
     def test_envrcpt(self):
         self.milter.envrcpt("Foo@Bar.Net")
-        self.assertEqual(self.milter.envlp_to_address, "Foo@Bar.Net")
+        self.assertEqual(self.milter.envlp_to_address, "foo@bar.net")
 
     def test_envrcpt_return(self):
         result = self.milter.envrcpt("Foo@Bar.Net")
@@ -285,7 +285,7 @@ class DMARCMilterTest(TestCase):
 
     def test_envfrom(self):
         self.milter.is_internal_host = True
-        self.milter.envfrom('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org')
+        self.milter.envfrom('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org (cron daemon)')
         self.assertEqual(self.milter.envlp_from_domain, 'bak.bang.bong.org')
 
     def test_envfrom_return_continue(self):

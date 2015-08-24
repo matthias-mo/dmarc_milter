@@ -108,8 +108,8 @@ class DMARCMilter(Milter.Base):
     def changeMailToAddress(self, envlp_address, address_with_name):
         self.chgheader('To', 1, address_with_name)
         self.addrcpt(envlp_address)
-        self.delrcpt(self.envlp_to_address)
-        self.envlp_to_address = envlp_address
+        self.delrcpt(self.envlp_to_address_orig)
+        self.envlp_to_address_orig = envlp_address
         self.config.logger.debug("Changed header \"To\" address to \"{0}\", changed envelope \"To\" address to \"{1}\".".format(address_with_name, envlp_address))
 
     # take the existing header "From" field and encode it
@@ -146,6 +146,7 @@ class DMARCMilter(Milter.Base):
     def __init__(self, config):
         self.is_internal_host      = None
         self.envlp_to_address      = None
+        self.envlp_to_address_orig = None
         self.envlp_from_domain     = None
         self.hdr_from_domain       = None
         self.hdr_from_address      = None
@@ -172,21 +173,28 @@ class DMARCMilter(Milter.Base):
 
     # save the envelope RCP TO for later use
     def envrcpt(self, envelope_to, *str):
-        self.envlp_to_address = envelope_to
-        self.config.logger.debug("Envelope \"RCP TO\" address: \"{0}\"".format(envelope_to))
+        self.envlp_to_address_orig = envelope_to
+        match = self.config.addr_regex.search(envelope_to.lower())
+        if match:
+            self.envlp_to_address = match.group(1)
+            self.config.logger.debug("Envelope \"RCP To\" address: \"{0}\".".format(self.envlp_to_address))
+        else:
+            self.config.logger.error("Can't extract email address from envelope \"To:\": \"{0}\"".format(envelope_to.lower()))
+            return Milter.REJECT
 
         return Milter.CONTINUE
 
     # save the envelope Return-Path for later use
     def envfrom(self, envelope_from, *str):
-        self.config.logger.debug("Envelope \"MAIL FROM\" address: \"{0}\"".format(envelope_from))
         if self.is_internal_host:
-            try:
-                self.envlp_from_domain = envelope_from[envelope_from.rindex('@') + 1:].lower().translate(None, '<>')
+            match = self.config.addr_regex.search(envelope_from.lower())
+            if match:
+                envlp_from_address = match.group(1)
+                self.config.logger.debug("Envelope \"MAIL FROM\" address: \"{0}\"".format(envlp_from_address))
+                self.envlp_from_domain = envlp_from_address[envlp_from_address.rindex('@') + 1:]
                 self.config.logger.debug("Envelope \"From\" domain: \"{0}\"".format(self.envlp_from_domain))
-            except ValueError as excpt:
-                self.config.logger.error("No @ character in From address: \"{0}\"".format(envelope_from))
-                self.config.logger.exception("Exception: ", excpt)
+            else:
+                self.config.logger.error("Can't extract email address from envelope \"MAIL FROM:\": \"{0}\"".format(envelope_from.lower()))
                 return Milter.REJECT
 
         return Milter.CONTINUE
