@@ -24,7 +24,8 @@ class Config():
         self.internal_hosts = (
             "127.0.0.1",
             "localhost",
-            "localhost.localdomain"
+            "localhost.localdomain",
+            "web.moreonion.com"
         )
         self.hosted_domains = (
             "action.advocacy-engine.com",
@@ -592,6 +593,19 @@ class DMARCMilterTest(TestCase):
         mapping = AddrMapping.get(AddrMapping.addr == 'some.supporter_name@some.address.net', AddrMapping.action_uuid == '9bed7305-8af0-42ff-adee-744657f73917')
         match = re.match('^firstname\.last_name\.[a-z]{11}[@]m\.more\-onion\.com$', mapping.encoded_addr)
         self.assertIsNotNone(match)
+
+    # -------------------------------------------------------------------------------------
+    # internal host, "From" domain is not hosted, "To" domain is internal host
+    # -------------------------------------------------------------------------------------
+    def test_eom_is_internal_hdr_from_not_hosted_hdr_to_internal(self):
+        self.config.resetDB()
+        result = self._prepare_eom(
+            'webdev@web.moreonion.com',
+            'hosting@donor-engine.com',
+            'root@web.moreonion.com',
+            'hosting@donor-engine.com',
+            'web.moreonion.com')
+        self.assertEqual(result, Milter.ACCEPT)
 
     # -------------------------------------------------------------------------------------
     # external host, header "To" address has mapping

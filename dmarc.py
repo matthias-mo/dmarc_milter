@@ -151,6 +151,7 @@ class DMARCMilter(Milter.Base):
         self.hdr_from_address      = None
         self.hdr_from_address_orig = None
         self.hdr_to_address        = None
+        self.hdr_to_domain         = None
         self.x_mail_domain         = None
         self.x_action_uuid         = None
         self.id                    = Milter.uniqueID()
@@ -206,6 +207,15 @@ class DMARCMilter(Milter.Base):
                 self.config.logger.error("Can't extract email address from header \"To:\" field: \"{0}\"".format(value.lower()))
                 return Milter.REJECT
 
+            if self.is_internal_host:
+                try:
+                    self.hdr_to_domain = value[value.rindex('@') + 1:].lower().translate(None, '<>')
+                    self.config.logger.debug("Header \"To\" domain: \"{0}\"".format(self.hdr_to_domain))
+                except ValueError as excpt:
+                    self.config.logger.error("No @ character in \"To\" address: \"{0}\"".format(value.lower()))
+                    self.config.logger.exception("Exception: ", excpt)
+                    return Milter.REJECT
+
         elif field == 'from':
             self.hdr_from_address_orig = value
             match                      = self.config.addr_regex.search(value.lower())
@@ -221,7 +231,7 @@ class DMARCMilter(Milter.Base):
                     self.hdr_from_domain = value[value.rindex('@') + 1:].lower().translate(None, '<>')
                     self.config.logger.debug("Header \"From\" domain: \"{0}\"".format(self.hdr_from_domain))
                 except ValueError as excpt:
-                    self.config.logger.error("No @ character in From address: \"{0}\"".format(value))
+                    self.config.logger.error("No @ character in \"From\" address: \"{0}\"".format(value.lower()))
                     self.config.logger.exception("Exception: ", excpt)
                     return Milter.REJECT
 
@@ -247,7 +257,8 @@ class DMARCMilter(Milter.Base):
     def eom(self):
         try:
             if self.is_internal_host:
-                if self.hdr_from_domain not in self.config.hosted_domains:
+                if (    self.hdr_from_domain not in self.config.hosted_domains
+                    and self.hdr_to_domain   not in self.config.hosted_domains):
                     if not self.x_mail_domain:
                         self.quarantine("DMARCMilter: header \"From\" domain is not one of the hosted domains and no \"X-Mail-Domain\" header set! Quarantined!")
                         self.config.logger.warning("Header \"From\" domain \"{0}\" is not one of the hosted domains and no \"X-Mail-Domain\" header set. Mail is quarantined!".format(self.hdr_from_domain))
