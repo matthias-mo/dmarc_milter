@@ -309,6 +309,11 @@ class DMARCMilterTest(TestCase):
         result = self.milter.header('To', '!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38baK.NonG.NonG.ORG>')
         self.assertEqual(result, Milter.REJECT)
 
+    def test_header_hdr_to_domain(self):
+        self.milter.is_internal_host = True
+        self.milter.header('To', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG> (foo bar)')
+        self.assertEqual(self.milter.hdr_to_domain, 'bak.nong.nong.org')
+
     def test_header_from_external_address(self):
         self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
         self.assertEqual(self.milter.hdr_from_address, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.nong.nong.org')
@@ -319,7 +324,7 @@ class DMARCMilterTest(TestCase):
 
     def test_header_from_internal_domain(self):
         self.milter.is_internal_host = True
-        self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
+        self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG> (Foo Bar Baz)')
         self.assertEqual(self.milter.hdr_from_domain, 'bak.nong.nong.org')
 
     def test_header_from_return_continue(self):

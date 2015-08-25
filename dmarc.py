@@ -217,7 +217,7 @@ class DMARCMilter(Milter.Base):
 
             if self.is_internal_host:
                 try:
-                    self.hdr_to_domain = value[value.rindex('@') + 1:].lower().translate(None, '<>')
+                    self.hdr_to_domain = self.hdr_to_address[self.hdr_to_address.rindex('@') + 1:]
                     self.config.logger.debug("Header \"To\" domain: \"{0}\"".format(self.hdr_to_domain))
                 except ValueError as excpt:
                     self.config.logger.error("No @ character in \"To\" address: \"{0}\"".format(value.lower()))
@@ -236,7 +236,7 @@ class DMARCMilter(Milter.Base):
 
             if self.is_internal_host:
                 try:
-                    self.hdr_from_domain = value[value.rindex('@') + 1:].lower().translate(None, '<>')
+                    self.hdr_from_domain =  self.hdr_from_address[self.hdr_from_address.rindex('@') + 1:]
                     self.config.logger.debug("Header \"From\" domain: \"{0}\"".format(self.hdr_from_domain))
                 except ValueError as excpt:
                     self.config.logger.error("No @ character in \"From\" address: \"{0}\"".format(value.lower()))
