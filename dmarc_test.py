@@ -13,13 +13,14 @@ from dmarc import DMARCMilter, AddrMapping, db_proxy
 
 class Config():
     def __init__(self):
-        self.log_level    = logging.CRITICAL
+        self.log_level    = logging.INFO
         self.socket       = "/tmp/dmarc.socket"
         self.timeout      = 5
         self.return_paths = {
             "action.advocacy-engine.com" : "bounce@action.advocacy-engine.com",
             "donor-engine.com"           : "bounce@donor-engine.com",
-            "m.more-onion.com"           : "bounce@m.more-onion.com"
+            "m.more-onion.com"           : "bounce@m.more-onion.com",
+            "action.openrightsgroup.org" : "bounce@action.openrightsgroup.org"
         }
         self.internal_hosts = (
             "127.0.0.1",
@@ -30,7 +31,8 @@ class Config():
         self.hosted_domains = (
             "action.advocacy-engine.com",
             "donor-engine.com",
-            "m.more-onion.com"
+            "m.more-onion.com",
+            "action.openrightsgroup.org"
         )
         self.addr_regex = re.compile("[<]?([A-Za-z0-9\.\!#\$%&'\*\+\-/=\?\^_`\{\|\}\~]+@[0-9a-zA-Z\-]+(\.[0-9a-zA-Z\-]+)*\.[a-zA-Z]+)[>]?[^@]*$")
         self.name_regex = re.compile('^([^<]+)[<].*$')
@@ -232,7 +234,6 @@ class DMARCMilterTest(TestCase):
         self.milter.hdr_from_address_orig = '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>'
         self.config.resetDB()
         self.milter.encodeMailFromAddress()
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(self.milter.hdr_from_domain, 'foo.bar.net')
 
     def test_encodeMailFromAddress_return_path(self):
@@ -451,6 +452,55 @@ class DMARCMilterTest(TestCase):
             '9bed7305-8af0-42ff-adee-744657f73917')
         self.assertEqual(result, Milter.ACCEPT)
 
+    def test_eom_is_internal_yes_is_hosted_yes_evlp_from_eq_hdr_from_z1436_nr1(self):
+        self.config.resetDB()
+        self._prepare_eom(
+            'Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>',
+            'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
+            'bounce@action.openrightsgroup.org',
+            'john.glen.mp@parliament.uk',
+            'localhost',
+            'action.openrightsgroup.org',
+            '9bed7305-8af0-42ff-adee-744657f73917')
+        encoded_addr_regex = re.compile('\"Stuart Fyfe\" <stuart\.fyfe\.[a-zA-Z0-9]*@action\.openrightsgroup\.org')
+        self.assertTrue(encoded_addr_regex.match(self.milter._ctx.header['From']))
+
+    def test_eom_is_internal_yes_is_hosted_yes_evlp_from_eq_hdr_from_z1436_nr2(self):
+        self.config.resetDB()
+        self._prepare_eom(
+            'Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>',
+            'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
+            'bounce@action.openrightsgroup.org',
+            'john.glen.mp@parliament.uk',
+            'localhost',
+            'action.openrightsgroup.org',
+            '9bed7305-8af0-42ff-adee-744657f73917')
+        self.assertEqual(self.milter._ctx.header['To'], 'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>')
+
+    def test_eom_is_internal_yes_is_hosted_yes_evlp_from_eq_hdr_from_z1436_nr3(self):
+        self.config.resetDB()
+        self._prepare_eom(
+            'Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>',
+            'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
+            'bounce@action.openrightsgroup.org',
+            'john.glen.mp@parliament.uk',
+            'localhost',
+            'action.openrightsgroup.org',
+            '9bed7305-8af0-42ff-adee-744657f73917')
+        self.assertEqual(self.milter._ctx.envlp_from, 'bounce@action.openrightsgroup.org')
+
+    def test_eom_is_internal_yes_is_hosted_yes_evlp_from_eq_hdr_from_z1436_nr4(self):
+        self.config.resetDB()
+        self._prepare_eom(
+            'Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>',
+            'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
+            'bounce@action.openrightsgroup.org',
+            'john.glen.mp@parliament.uk',
+            'localhost',
+            'action.openrightsgroup.org',
+            '9bed7305-8af0-42ff-adee-744657f73917')
+        self.assertEqual(self.milter._ctx.envlp_to, 'john.glen.mp@parliament.uk')
+
     def test_eom_is_internal_yes_is_hosted_no_x_mail_domain_in_hosted_domains_check_hdr_from(self):
         self.config.resetDB()
         self._prepare_eom(
@@ -474,7 +524,6 @@ class DMARCMilterTest(TestCase):
             'localhost',
             'm.more-onion.com',
             '9bed7305-8af0-42ff-adee-744657f73917')
-        mapping = AddrMapping.get(AddrMapping.addr == 'some.supporter_name@some.address.net', AddrMapping.action_uuid == '9bed7305-8af0-42ff-adee-744657f73917')
         self.assertEqual(self.milter._ctx.header['To'], '"The Recipient" <recipient@address.com>')
 
     def test_eom_is_internal_yes_is_hosted_no_x_mail_domain_in_hosted_domains_check_envlp_from(self):
@@ -487,7 +536,6 @@ class DMARCMilterTest(TestCase):
             'localhost',
             'm.more-onion.com',
             '9bed7305-8af0-42ff-adee-744657f73917')
-        mapping = AddrMapping.get(AddrMapping.addr == 'some.supporter_name@some.address.net', AddrMapping.action_uuid == '9bed7305-8af0-42ff-adee-744657f73917')
         self.assertEqual(self.milter._ctx.envlp_from, self.config.return_paths['m.more-onion.com'])
 
     def test_eom_is_internal_yes_is_hosted_no_x_mail_domain_in_hosted_domains_check_envlp_to(self):
@@ -500,7 +548,6 @@ class DMARCMilterTest(TestCase):
             'localhost',
             'm.more-onion.com',
             '9bed7305-8af0-42ff-adee-744657f73917')
-        mapping = AddrMapping.get(AddrMapping.addr == 'some.supporter_name@some.address.net', AddrMapping.action_uuid == '9bed7305-8af0-42ff-adee-744657f73917')
         self.assertEqual(self.milter._ctx.envlp_to, 'recipient@address.com')
 
     # -------------------------------------------------------------------------------------
@@ -653,6 +700,20 @@ class DMARCMilterTest(TestCase):
             mapping.encoded_addr,
             'some.address.net')
         self.assertEqual(self.milter._ctx.envlp_to, 'some.supporter_name@some.address.net')
+
+    def test_eom_is_not_internal_hdr_to_has_mapping_check_z1436_nr5(self):
+        self.config.resetDB()
+        self.milter.x_mail_domain = 'action.openrightsgroup.org'
+        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        mapping = self.milter.encodeAddress('stuart.fyfe1@ntlworld.com', 'Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>')
+        self._prepare_eom(
+            'GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
+            '"' + mapping.name + '" <' + mapping.encoded_addr + '>',
+            'bounce@parliament.uk',
+            mapping.encoded_addr,
+            'parliament.uk')
+
+        self.assertEqual(self.milter._ctx.envlp_to, 'stuart.fyfe1@ntlworld.com')
 
     # -------------------------------------------------------------------------------------
     # external host, header "To" address has mapping, header "From" has mapping
