@@ -27,9 +27,73 @@ class AddrMapping(Model):
     name         = CharField(null=True, max_length=255)
 
     class Meta:
-        database = db_proxy
-        db_table = 'email_address_mapping'
+        database    = db_proxy
+        db_table    = 'email_address_mapping'
         primary_key = CompositeKey('addr', 'action_uuid')
+
+
+class EmailAddress():
+
+    def __init__(self, address=None, logger):
+        self.orig_addr = address
+        self.addr      = None
+        self.name      = None
+        self.logger    = logger
+
+        if address:
+            self.cleanSetAddrAndName(address)
+
+
+    @classmethod
+    def fromData(cls, address, name, logger):
+        address = EmailAddress(logger=self.config.logger)
+        self.addr      = addr
+        self.name      = name
+        self.orig_addr = self.getNameAddress()
+
+
+    def cleanSetAddrAndName(self, address):
+        self.orig_addr = address
+
+        addr_regex = re.compile("[<]?([A-Za-z0-9\.\!#\$%&'\*\+\-/=\?\^_`\{\|\}\~]+@[0-9a-zA-Z\-]+(\.[0-9a-zA-Z\-]+)*\.[a-zA-Z]+)[>]?[^@]*$")
+
+        match = addr_regex.search(address.lower())
+        if match:
+            self.addr = match.group(1)
+            self.logger.debug("Parsed address: \"{0}\".".format(self.addr))
+        else:
+            self.logger.error("Can't extract email address from: \"{0}\"".format(address.lower()))
+            raise Exception("Can't extract email address from: \"{0}\"".format(address.lower()))
+
+        name_regex = re.compile('^([^<]+)[<].*$')
+
+        match = name_regex.search(address)
+        if match:
+            self.name = match.group(1).strip().replace('"', '')
+
+
+    def getDomain(self):
+
+        if self.addr:
+            self.logger.debug("Extracted domain from address: \"{0}\"".format(self.addr[self.addr.rindex('@') + 1:]))
+            return self.addr[self.addr.rindex('@') + 1:]
+
+
+    def getNameAddress(self):
+        if self.name:
+            return '"' + self.name + '" <' + self.addr + '>')
+        else:
+            self.addr
+
+
+class EmailHeader():
+
+    def __init__(self, logger, envlp_from=None, envlp_to=None, hdr_from=None, hdr_to=None):
+
+        self.envlp_from = EmailAddress(address=envlp_from, logger=logger)
+        self.envlp_to   = EmailAddress(address=envlp_to,   logger=logger)
+        self.hdr_from   = EmailAddress(address=hdr_from,   logger=logger)
+        self.hdr_to     = EmailAddress(address=hdr_to,     logger=logger)
 
 
 class DMARCMilter(Milter.Base):
@@ -43,22 +107,17 @@ class DMARCMilter(Milter.Base):
     # @param address pure email address used for encoding/lookup
     # @param address_orig email address that might include the persons
     #        name in a comment
-    def encodeAddress(self, address, address_orig):
+    def encodeAddress(self, address):
         encoded_address = ''
         name            = None
         mapping         = None
-
-        # extract the persons name from the original email address
-        match = self.config.name_regex.search(address_orig)
-        if match:
-            name = match.group(1).strip().replace('"', '')
 
         # if we have the name of the person from the comment of the mail address,
         # use it to extract first name + last name and try to build the encoded
         # address as "firstname.lastname.randomstring@mail-domain.tld"
         #  "firstname.lastname.randomstring" must not be longer than 64 characters
-        if name and len(name) > 0:
-            name_split = name.split(' ')
+        if address.name and len(address.name) > 0:
+            name_split = address.name.split(' ')
             if name_split and len(name_split) > 0:
                 if len(name_split[0]) > 0 and len(name_split[0]) <= 52:
                     # we got a first name, start building the encoded address
@@ -71,14 +130,14 @@ class DMARCMilter(Milter.Base):
         # build the rest of the encoded address with random string of 11 characters and the mail domain
         encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.x_mail_domain
 
-        self.config.logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address, encoded_address))
+        self.config.logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address.addr, encoded_address))
 
         return AddrMapping.create(
             encoded_addr=encoded_address,
-            addr=address,
+            addr=address.addr,
             action_uuid=self.x_action_uuid,
             created=int(time.time()),
-            name=name)
+            name=address.name)
 
     def getDecodedAddress(self, address):
         mapping = None
@@ -102,63 +161,61 @@ class DMARCMilter(Milter.Base):
         except AddrMapping.DoesNotExist as excpt:
             self.config.logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, self.x_action_uuid))
 
-        return mapping
+        if mapping:
+            return EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name, logger=self.config.logger)
+        else:
+            return None
+
 
     # change header and envelope "To" fields
-    def changeMailToAddress(self, envlp_address, address_with_name):
-        self.chgheader('To', 1, address_with_name)
-        self.addrcpt(envlp_address)
-        self.delrcpt(self.envlp_to_address_orig)
-        self.envlp_to_address_orig = envlp_address
-        self.config.logger.debug("Changed header \"To\" address to \"{0}\", changed envelope \"To\" address to \"{1}\".".format(address_with_name, envlp_address))
+    def changeMailToAddress(self, address):
+        addr = address.getNameAddress()
+
+        self.chgheader('To', 1, addr)
+        self.addrcpt(address.addr)
+        self.delrcpt(self.header.envlp_to.addr_orig)
+
+        self.header.envlp_to.addr = address
+
+        self.config.logger.debug("Changed header \"To\" address to \"{0}\", changed envelope \"To\" address to \"{1}\".".format(addr, address.addr))
 
     # take the existing header "From" field and encode it
     # expects that self.x_mail_domain and self.x_action_uuid is set
-    def encodeMailFromAddress(self, return_path=None):
-        mapping = self.getEncodedAddressAndName(self.hdr_from_address)
-        if not mapping:
-            mapping = self.encodeAddress(self.hdr_from_address, self.hdr_from_address_orig)
+    def encodeHdrFromAddress(self):
+        address = self.getEncodedAddressAndName(self.header.hdr_from.addr)
+        if not address:
+            address = self.encodeAddress(self.header.hdr_from)
 
-        enc_addr_with_name = None
-        if mapping.name and len(mapping.name) > 0:
-            enc_addr_with_name = '"' + mapping.name + '" <' + mapping.encoded_addr + '>'
-        
-        self.changeMailFromAddress(mapping.encoded_addr, enc_addr_with_name, return_path)
-        
+        self.changeMailFromAddress(address)
+
     # change header "From" field
-    # change envelope "MAIL FROM" field when a return path is given
-    def changeMailFromAddress(self, address, address_with_name=None, return_path=None):
-        if address_with_name:
-            self.chgheader('From', 1, address_with_name)
-            self.hdr_from_address = address_with_name
-        else:
-            self.chgheader('From', 1, address)
-            self.hdr_from_address = address
+    def changeHdrFromAddress(self, address):
+        self.chgheader('From', 1, address.getNameAddress())
 
-        self.config.logger.debug("Changed header \"From\" to \"{0}\".".format(self.hdr_from_address))
-        self.hdr_from_domain = address[address.rindex('@') + 1:]
-        
-        if return_path:
-            self.chgfrom(return_path)
-            self.envlp_from_domain = return_path[return_path.rindex('@') + 1:]
-            self.config.logger.debug("Changed envelope \"From\" to \"{0}\".".format(return_path))
-                
+        self.header.hdr_from = address
+
+        self.config.logger.debug("Changed header \"From\" to \"{0}\".".format(self.header.hdr_from.addr))
+
+    # change envelope "MAIL FROM" field when a return path is given
+    def changeEnvlpFromAddress(self, address):
+        self.chgfrom(address.addr)
+        self.header.envlp_from = address
+        self.config.logger.debug("Changed envelope \"From\" to \"{0}\".".format(address.addr))
+
     def __init__(self, config):
         self.is_internal_host      = None
-        self.envlp_to_address      = None
-        self.envlp_to_address_orig = None
-        self.envlp_from_domain     = None
-        self.hdr_from_domain       = None
-        self.hdr_from_address      = None
-        self.hdr_from_address_orig = None
-        self.hdr_to_address        = None
-        self.hdr_to_domain         = None
+        self.header                = EmailHeader(logger=config.logger)
+
         self.x_mail_domain         = None
         self.x_action_uuid         = None
         self.id                    = Milter.uniqueID()
         self.config                = config
 
         self.config.logger.debug('__init__')
+
+    # -----------------------------------------------------------------------------
+    # Milter API implementation
+    # -----------------------------------------------------------------------------
 
     # check if a connecting SMTP client is an internal host
     def hello(self, hostname):
@@ -173,12 +230,10 @@ class DMARCMilter(Milter.Base):
 
     # save the envelope RCP TO for later use
     def envrcpt(self, envelope_to, *str):
-        self.envlp_to_address_orig = envelope_to
-        match = self.config.addr_regex.search(envelope_to.lower())
-        if match:
-            self.envlp_to_address = match.group(1)
-            self.config.logger.debug("Envelope \"RCP To\" address: \"{0}\".".format(self.envlp_to_address))
-        else:
+        try:
+            self.header.envlp_to.cleanSetAddrAndName(envelope_to)
+            self.config.logger.debug("Envelope \"RCP To\" address: \"{0}\".".format(self.header.envlp_to.addr))
+        except Exception as e:
             self.config.logger.error("Can't extract email address from envelope \"To:\": \"{0}\"".format(envelope_to.lower()))
             return Milter.REJECT
 
@@ -186,16 +241,12 @@ class DMARCMilter(Milter.Base):
 
     # save the envelope Return-Path for later use
     def envfrom(self, envelope_from, *str):
-        if self.is_internal_host:
-            match = self.config.addr_regex.search(envelope_from.lower())
-            if match:
-                envlp_from_address = match.group(1)
-                self.config.logger.debug("Envelope \"MAIL FROM\" address: \"{0}\"".format(envlp_from_address))
-                self.envlp_from_domain = envlp_from_address[envlp_from_address.rindex('@') + 1:]
-                self.config.logger.debug("Envelope \"From\" domain: \"{0}\"".format(self.envlp_from_domain))
-            else:
-                self.config.logger.error("Can't extract email address from envelope \"MAIL FROM:\": \"{0}\"".format(envelope_from.lower()))
-                return Milter.REJECT
+        try:
+            self.header.envlp_from.cleanSetAddrAndName(envelope_from)
+            self.config.logger.debug("Envelope \"MAIL FROM\" address: \"{0}\"".format(self.header.envlp_from.addr))
+        except Exception as e:
+            self.config.logger.error("Can't extract email address from envelope \"MAIL FROM:\": \"{0}\"".format(envelope_from.lower()))
+            return Milter.REJECT
 
         return Milter.CONTINUE
 
@@ -207,41 +258,20 @@ class DMARCMilter(Milter.Base):
     def header(self, field, value):
         field = field.lower()
         if field == 'to':
-            match = self.config.addr_regex.search(value.lower())
-            if match:
-                self.hdr_to_address = match.group(1)
-                self.config.logger.debug("Header \"To\" address: \"{0}\".".format(self.hdr_to_address))
-            else:
+            try:
+                self.header.hdr_to.cleanSetAddrAndName(value)
+                self.config.logger.debug("Header \"To\" address: \"{0}\".".format(self.header.hdr_to.addr))
+            except Exception as e:
                 self.config.logger.error("Can't extract email address from header \"To:\" field: \"{0}\"".format(value.lower()))
                 return Milter.REJECT
 
-            if self.is_internal_host:
-                try:
-                    self.hdr_to_domain = self.hdr_to_address[self.hdr_to_address.rindex('@') + 1:]
-                    self.config.logger.debug("Header \"To\" domain: \"{0}\"".format(self.hdr_to_domain))
-                except ValueError as excpt:
-                    self.config.logger.error("No @ character in \"To\" address: \"{0}\"".format(value.lower()))
-                    self.config.logger.exception("Exception: ", excpt)
-                    return Milter.REJECT
-
         elif field == 'from':
-            self.hdr_from_address_orig = value
-            match                      = self.config.addr_regex.search(value.lower())
-            if match:
-                self.hdr_from_address = match.group(1)
-                self.config.logger.debug("Header \"From\" address: \"{0}\".".format(self.hdr_from_address))
-            else:
+            try:
+                self.header.hdr_from.cleanSetAddrAndName(value)
+                self.config.logger.debug("Header \"From\" address: \"{0}\".".format(self.header.hdr_from.addr))
+            except Exception as e:
                 self.config.logger.error("Can't extract email address from header \"From:\" field: \"{0}\"".format(value.lower()))
                 return Milter.REJECT
-
-            if self.is_internal_host:
-                try:
-                    self.hdr_from_domain =  self.hdr_from_address[self.hdr_from_address.rindex('@') + 1:]
-                    self.config.logger.debug("Header \"From\" domain: \"{0}\"".format(self.hdr_from_domain))
-                except ValueError as excpt:
-                    self.config.logger.error("No @ character in \"From\" address: \"{0}\"".format(value.lower()))
-                    self.config.logger.exception("Exception: ", excpt)
-                    return Milter.REJECT
 
         elif field == 'x-mail-domain':
             self.x_mail_domain = value.lower()
@@ -265,8 +295,8 @@ class DMARCMilter(Milter.Base):
     def eom(self):
         try:
             if self.is_internal_host:
-                if (    self.hdr_from_domain not in self.config.hosted_domains
-                    and self.hdr_to_domain   not in self.config.hosted_domains):
+                if (    self.header.hdr_from.getDomain() not in self.config.hosted_domains
+                    and self.header.hdr_to.getDomain()   not in self.config.hosted_domains):
                     if not self.x_mail_domain:
                         self.quarantine("DMARCMilter: header \"From\" domain is not one of the hosted domains and no \"X-Mail-Domain\" header set! Quarantined!")
                         self.config.logger.warning("Header \"From\" domain \"{0}\" is not one of the hosted domains and no \"X-Mail-Domain\" header set. Mail is quarantined!".format(self.hdr_from_domain))
@@ -280,14 +310,14 @@ class DMARCMilter(Milter.Base):
                         self.config.logger.warning("Domain from \"X-Mail-Domain\" = \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.x_mail_domain))
                         return Milter.TEMPFAIL
                     else:
-                        self.encodeMailFromAddress()
+                        self.encodeHdrFromAddress()
                         # remove auxiliary header fields
                         self.chgheader('X-Mail-Domain', 1, None)
                         self.chgheader('X-Action-UUID', 1, None)
 
-                if self.hdr_from_domain != self.envlp_from_domain:
+                if self.header.hdr_from.getDomain() != self.header.envlp_from.getDomain():
                     self.quarantine("DMARCMilter: header \"From\" domain is not the same as envelope \"From\" domain! Quarantined!")
-                    self.config.logger.warning("Header \"From\" domain \"{0}\" is not the same as envelope \"From\" domain \"{1}\". Mail is quarantined!".format(self.hdr_from_domain, self.envlp_from_domain))
+                    self.config.logger.warning("Header \"From\" domain \"{0}\" is not the same as envelope \"From\" domain \"{1}\". Mail is quarantined!".format(self.header.hdr_from.getDomain(), self.header.envlp_from.getDomain()))
                     return Milter.TEMPFAIL
                 else:
                     self.config.logger.debug("Mail with \"From\" domain \"{0}\" was accepted for sending.".format(self.hdr_from_domain))
@@ -296,20 +326,24 @@ class DMARCMilter(Milter.Base):
                 self.chgheader('Sender', 1, None)
 
             else:
-                mapping = self.getDecodedAddress(self.hdr_to_address)
+                mapping = self.getDecodedAddress(self.header.hdr_to.addr)
                 if mapping:
-                    new_to_addr = ''
-                    if mapping.name:
-                        new_to_addr = '"' + mapping.name + '" <' + mapping.addr + '>'
-                    else:
-                        new_to_addr = mapping.addr
-                    self.changeMailToAddress(mapping.addr, new_to_addr)
-                    self.x_mail_domain = self.hdr_to_address[self.hdr_to_address.rindex('@') + 1:]
+                    new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name, logger=self.config.logger)
+                    self.changeMailToAddress(new_address)
+                    self.x_mail_domain = self.header.hdr_to.getDomain()
                     self.x_action_uuid = mapping.action_uuid
+                    self.encodeHdrFromAddress()
+
                     # we are forwarding mail: we need to change the envelope Return-Path.
-                    return_path = self.config.return_paths[self.x_mail_domain]
-                    self.encodeMailFromAddress(return_path)
+                    envlp_from = EmailAddress.fromData(address=self.config.return_paths[self.x_mail_domain], name=None, logger=self.config.logger)
+                    self.changeEnvlpFromAddress(envlp_from)
+
                     self.chgheader('DKIM-Signature', 1, None)
+
+        except ValueError as excpt:
+            self.config.logger.error("Error extracting domain from address, no \"@\" character in email address")
+            self.config.logger.exception("Exception: ", excpt)
+            return Milter.REJECT
 
         except Exception as excpt:
             self.config.logger.error("Exception while processing mail! Rejecting mail!")
