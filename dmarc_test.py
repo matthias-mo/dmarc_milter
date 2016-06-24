@@ -34,9 +34,6 @@ class Config():
             "m.more-onion.com",
             "action.openrightsgroup.org"
         )
-        self.addr_regex = re.compile("[<]?([A-Za-z0-9\.\!#\$%&'\*\+\-/=\?\^_`\{\|\}\~]+@[0-9a-zA-Z\-]+(\.[0-9a-zA-Z\-]+)*\.[a-zA-Z]+)[>]?[^@]*$")
-        self.name_regex = re.compile('^([^<]+)[<].*$')
-
         self.logger = logging.getLogger('DMARCMilterTestLogger')
         self.logger.setLevel(self.log_level)
 
@@ -93,7 +90,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        mapping = self.milter.encodeAddress('foo@bar.net', 'Foo@Bar.Net')
+        mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net', logger=self.logging))
         match = re.match('^[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
         self.assertIsNotNone(match)
 
@@ -101,7 +98,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        mapping = self.milter.encodeAddress('foo@bar.net', '"Baz Boo" <Foo@Bar.Net>')
+        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.logging))
         match = re.match('^baz\.boo\.[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
         self.assertIsNotNone(match)
 
@@ -109,21 +106,21 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        mapping = self.milter.encodeAddress('foo@bar.net', '"Baz Boo" <Foo@Bar.Net>')
+        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.logging))
         self.assertEqual(mapping.name, "Baz Boo")
 
     def test_encodeAddress_name_is_none(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        mapping = self.milter.encodeAddress('foo@bar.net', 'Foo@Bar.Net')
+        mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net', logger=self.logging))
         self.assertIsNone(mapping.name)
 
     def test_encodeAddress_peewee_encoded_addr(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        gen_mapping = self.milter.encodeAddress('foo@bar.net', 'Foo@Bar.Net')
+        gen_mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net', logger=self.logging))
         get_mapping = AddrMapping.get(AddrMapping.encoded_addr == gen_mapping.encoded_addr)
         self.assertEqual(get_mapping.addr, 'foo@bar.net')
 
@@ -131,7 +128,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', 'Foo@Bar.Net')
+        self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertIsNone(mapping.name)
 
@@ -139,7 +136,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', 'Foo@Bar.Net')
+        self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         compare_time = int(time.time()) - 10
         self.assertGreater(mapping.created, compare_time)
@@ -148,7 +145,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        gen_mapping = self.milter.encodeAddress('foo@bar.net', '"Baz Boo" <Foo@Bar.Net>')
+        gen_mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.logging))
         get_mapping = AddrMapping.get(AddrMapping.encoded_addr == gen_mapping.encoded_addr)
         self.assertEqual(get_mapping.addr, 'foo@bar.net')
 
@@ -156,7 +153,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', '"Baz Boo" <Foo@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'Baz Boo')
 
@@ -164,7 +161,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', '"Baz Boo" <Foo@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         compare_time = int(time.time()) - 10
         self.assertGreater(mapping.created, compare_time)
@@ -173,7 +170,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', '"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'Baz Boo')
 
@@ -181,7 +178,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', '"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
 
@@ -189,7 +186,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', '"jasdf 8asdf"8asdfas 888" <Foo@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"jasdf 8asdf"8asdfas 888" <Foo@Bar.Net>', logger=self.logging))
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'jasdf 8asdf8asdfas 888')
 
@@ -197,7 +194,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        mapping = self.milter.encodeAddress('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', '"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>')
+        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>', logger=self.logging))
         decoded = self.milter.getDecodedAddress(mapping.encoded_addr)
         self.assertEqual(decoded.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
 
@@ -205,7 +202,7 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        gen_mapping = self.milter.encodeAddress('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', '"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>')
+        gen_mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>', logger=self.logging))
         get_mapping = self.milter.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
         self.assertEqual(get_mapping.encoded_addr, gen_mapping.encoded_addr)
 
@@ -213,55 +210,50 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
-        self.milter.encodeAddress('foo@bar.net', '"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>')
+        self.milter.encodeAddress(EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>', logger=self.logging))
         mapping = self.milter.getEncodedAddressAndName('foo@bar.net')
         self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
 
-    def test_encodeMailFromAddress_hdr_from_address_no_return_path(self):
+    def test_encodeHdrFromAddress_hdr_from_address_no_return_path(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from_address = 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org'
-        self.milter.hdr_from_address_orig = '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>'
+        self.milter.hdr_from = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>', logger=self.logging)
         self.config.resetDB()
-        self.milter.encodeMailFromAddress()
+        self.milter.encodeHdrFromAddress()
         mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.milter.x_action_uuid)
-        self.assertEqual(self.milter.hdr_from_address, '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
+        self.assertEqual(self.milter.hdr_from.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
 
-    def test_encodeMailFromAddress_hdr_from_domain_no_return_path(self):
+    def test_encodeHdrFromAddress_hdr_from_domain_no_return_path(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from_address = 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org'
-        self.milter.hdr_from_address_orig = '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>'
+        self.milter.hdr_from = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>', logger=self.logging)
         self.config.resetDB()
-        self.milter.encodeMailFromAddress()
-        self.assertEqual(self.milter.hdr_from_domain, 'foo.bar.net')
+        self.milter.encodeHdrFromAddress()
+        self.assertEqual(self.milter.hdr_from.getDomain(), 'foo.bar.net')
 
-    def test_encodeMailFromAddress_return_path(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from_address = 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org'
-        self.milter.hdr_from_address_orig = '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>'
-        self.milter.encodeMailFromAddress('feng@fung.dong.schu.cn')
-        self.assertEqual(self.milter.envlp_from_domain, 'fung.dong.schu.cn')
+    def test_changeEnvlpFromAddress_return_path(self):
+        address = EmailAddress(address='feng@fung.dong.schu.cn', logger=self.logging)
+        self.milter.changeEnvlpFromAddress(address)
+        self.assertEqual(self.milter.envlp_from.getDomain(), 'fung.dong.schu.cn')
 
-    def test_changeMailFromAddress_hdr_from_address_without_name(self):
-        self.milter.changeMailFromAddress('aa@bb.at')
-        self.assertEqual(self.milter.hdr_from_address, 'aa@bb.at')
+    def test_changeHdrFromAddress_hdr_from_address_without_name(self):
+        self.milter.changeHdrFromAddress(EmailAddress(address='aa@bb.at', logger=self.logging))
+        self.assertEqual(self.milter.hdr_from.addr, 'aa@bb.at')
 
-    def test_changeMailFromAddress_hdr_from_domain_without_name(self):
-        self.milter.changeMailFromAddress('aa@bb.cc.dddd.at')
-        self.assertEqual(self.milter.hdr_from_domain, 'bb.cc.dddd.at')
+    def test_changeHdrFromAddress_hdr_from_domain_without_name(self):
+        self.milter.changeHdrFromAddress(EmailAddress(address='aa@bb.cc.dddd.at', logger=self.logging))
+        self.assertEqual(self.milter.hdr_from.getDomain(), 'bb.cc.dddd.at')
 
-    def test_changeMailFromAddress_hdr_from_address_with_name(self):
-        self.milter.changeMailFromAddress('huh@hah.com', '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>')
-        self.assertEqual(self.milter.hdr_from_address, '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>')
+    def test_changeHdrFromAddress_hdr_from_address_with_name(self):
+        self.milter.changeHdrFromAddress(EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>', logger=self.loggin))
+        self.assertEqual(self.milter.hdr_from.addr, '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>')
 
-    def test_changeMailFromAddress_hdr_from_domain_witht_name(self):
-        self.milter.changeMailFromAddress('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org', '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org>')
+    def test_changeHdrFromAddress_hdr_from_domain_witht_name(self):
+        self.milter.changeHdrFromAddress('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org', '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org>')
         self.assertEqual(self.milter.hdr_from_domain, 'bak.bang.bong.org')
 
-    def test_changeMailFromAddress_envlp_from_domain_with_name(self):
-        self.milter.changeMailFromAddress('huh@hah.com', '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>', 'this_is@the.return.path.com')
+    def test_changeHdrFromAddress_envlp_from_domain_with_name(self):
+        self.milter.changeHdrFromAddress('huh@hah.com', '"jasdf 235"1&16134%$!^o"[asd} <asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org>', 'this_is@the.return.path.com')
         self.assertEqual(self.milter.envlp_from_domain, 'the.return.path.com')
 
     def test_hello_internal(self):
@@ -278,7 +270,7 @@ class DMARCMilterTest(TestCase):
 
     def test_envrcpt(self):
         self.milter.envrcpt("Foo@Bar.Net")
-        self.assertEqual(self.milter.envlp_to_address, "foo@bar.net")
+        self.assertEqual(self.milter.envlp_to.addr, "foo@bar.net")
 
     def test_envrcpt_return(self):
         result = self.milter.envrcpt("Foo@Bar.Net")
@@ -287,7 +279,7 @@ class DMARCMilterTest(TestCase):
     def test_envfrom(self):
         self.milter.is_internal_host = True
         self.milter.envfrom('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org (cron daemon)')
-        self.assertEqual(self.milter.envlp_from_domain, 'bak.bang.bong.org')
+        self.assertEqual(self.milter.envlp_from.getDomain(), 'bak.bang.bong.org')
 
     def test_envfrom_return_continue(self):
         result = self.milter.envfrom('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.bang.bong.org')
@@ -300,7 +292,7 @@ class DMARCMilterTest(TestCase):
 
     def test_header_to(self):
         self.milter.header('To', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
-        self.assertEqual(self.milter.hdr_to_address, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.nong.nong.org')
+        self.assertEqual(self.milter.hdr_to.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.nong.nong.org')
 
     def test_header_to_return_continue(self):
         result = self.milter.header('To', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
@@ -313,20 +305,16 @@ class DMARCMilterTest(TestCase):
     def test_header_hdr_to_domain(self):
         self.milter.is_internal_host = True
         self.milter.header('To', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG> (foo bar)')
-        self.assertEqual(self.milter.hdr_to_domain, 'bak.nong.nong.org')
+        self.assertEqual(self.milter.hdr_to.getDomain(), 'bak.nong.nong.org')
 
     def test_header_from_external_address(self):
         self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
-        self.assertEqual(self.milter.hdr_from_address, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.nong.nong.org')
-
-    def test_header_from_external_domain(self):
-        self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG>')
-        self.assertIsNone(self.milter.hdr_from_domain)
+        self.assertEqual(self.milter.hdr_from.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.nong.nong.org')
 
     def test_header_from_internal_domain(self):
         self.milter.is_internal_host = True
         self.milter.header('From', '"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.NonG.NonG.ORG> (Foo Bar Baz)')
-        self.assertEqual(self.milter.hdr_from_domain, 'bak.nong.nong.org')
+        self.assertEqual(self.milter.hdr_from.getDomain(), 'bak.nong.nong.org')
 
     def test_header_from_return_continue(self):
         self.milter.is_internal_host = True
@@ -666,7 +654,7 @@ class DMARCMilterTest(TestCase):
         self.config.resetDB()
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress('some.supporter_name@some.address.net', '"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>')
+        mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>', logger=self.logging))
         result = self._prepare_eom(
             '"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             '"' + mapping.name + '" <' + mapping.encoded_addr + '>',
