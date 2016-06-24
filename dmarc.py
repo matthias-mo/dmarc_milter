@@ -11,8 +11,6 @@ import re
 import time
 import string
 import random
-#import traceback
-import sys
 
 import Milter
 from peewee import *
@@ -48,10 +46,12 @@ class EmailAddress():
 
     @classmethod
     def fromData(cls, address, name, logger):
-        address        = EmailAddress(logger=self.config.logger)
-        self.addr      = addr
-        self.name      = name
-        self.orig_addr = self.getNameAddress()
+        addr           = EmailAddress(logger=logger)
+        addr.addr      = address
+        addr.name      = name
+        addr.orig_addr = addr.getNameAddress()
+
+        return addr
 
 
     def cleanSetAddrAndName(self, address):
@@ -165,7 +165,7 @@ class DMARCMilter(Milter.Base):
 
         self.chgheader('To', 1, addr)
         self.addrcpt(address.addr)
-        self.delrcpt(self.envlp_to.addr_orig)
+        self.delrcpt(self.envlp_to.orig_addr)
 
         self.envlp_to.addr = address
 
@@ -178,6 +178,7 @@ class DMARCMilter(Milter.Base):
         if not address:
             mapping = self.encodeAddress(self.hdr_from)
             address = EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name, logger=self.config.logger)
+            #address = EmailAddress(logger=self.config.logger)
 
         self.changeHdrFromAddress(address)
 
@@ -278,7 +279,6 @@ class DMARCMilter(Milter.Base):
 
         return Milter.CONTINUE
 
-
     # for mails from internal hosts:
     #   - check if domain in header "From:" field is a hosted domain
     #   - if not and "X-Mail-Domain" field is not set -> quarantine
@@ -342,12 +342,7 @@ class DMARCMilter(Milter.Base):
             return Milter.REJECT
 
         except Exception as excpt:
-            #self.config.logger.error("Exception while processing mail! Rejecting mail!")
-            #traceback.print_stack()
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            #print("foo baoasdflajdflk", exc_type, fname, exc_tb.tb_lineno)
-            print sys.exc_info()
+            self.config.logger.error("Exception while processing mail! Rejecting mail!")
             self.config.logger.error("Exception: " + str(excpt))
             return Milter.REJECT
 
