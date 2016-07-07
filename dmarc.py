@@ -82,7 +82,7 @@ class EmailAddress():
                                    r'\2 \1',
                                    self.name)
                 self.name = self.name.strip()
-                extra_chars = ' .!#$%&*+-/=?^_`{|}~'
+                extra_chars = ' .#$&*+-/=?^_`{|}~'
                 allowed_chars = string.digits + string.letters + extra_chars
                 # erase non RFC compliant characters
                 self.name = filter(allowed_chars.__contains__, self.name)
@@ -133,6 +133,10 @@ class DMARCMilter(Milter.Base):
                     if len(last_name) > 1 and len(encoded_address + last_name) <= 51:
                         # we got a last name, add it to the encoded address
                         encoded_address += last_name + "."
+                    # erase multiple dots
+                    encoded_address = re.sub(r'\.{2,}',
+                                             r'.',
+                                             encoded_address)
 
         # build the rest of the encoded address with random string of 11 characters and the mail domain
         encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.x_mail_domain
