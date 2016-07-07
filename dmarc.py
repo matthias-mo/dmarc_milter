@@ -1,3 +1,5 @@
+# coding=utf8
+#
 # A simple milter that filters outgoing mail
 # If the connecting SMTP client is an internal host the
 # the From domain has to be one of a list of hosted
@@ -72,7 +74,22 @@ class EmailAddress():
         match = name_regex.search(address)
         if match:
             self.name = match.group(1).strip().replace('"', '')
-
+            if self.name.find(',') != -1:
+                # if there is a comma in the name we expect the name is written like
+                # "lastname, firstname"
+                # we extract first and lastname and swap them
+                self.name = re.sub(r'^([^,]+),(.*)$',
+                                   r'\2 \1',
+                                   self.name)
+                self.name = self.name.strip()
+                extra_chars = ' .!#$%&*+-/=?^_`{|}~'
+                allowed_chars = string.digits + string.letters + extra_chars
+                # erase non RFC compliant characters
+                self.name = filter(allowed_chars.__contains__, self.name)
+                # erase multiple spaces
+                self.name = re.sub(r' {2,}',
+                                   r' ',
+                                   self.name)
 
     def getDomain(self):
 

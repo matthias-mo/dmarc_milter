@@ -1,3 +1,5 @@
+# coding=utf8
+
 from unittest import TestCase
 import logging
 import logging.handlers
@@ -84,7 +86,13 @@ class DMARCMilterTest(TestCase):
         self.milter._actions = Milter.QUARANTINE | Milter.CHGHDRS | Milter.DELRCPT | Milter.ADDRCPT | Milter.CHGFROM
         self.milter._ctx = CTX()
 
-#    def tearDown(self):
+    def test_EmailAddress_name_is_none(self):
+        address = EmailAddress(address='Foo@Bar.Net', logger=self.config.logger)
+        self.assertIsNone(address.name)
+
+    def test_EmailAddress_name_has_comma_and_illegal_chars(self):
+        address = EmailAddress(address='"van der Lastname, Firstname, ßüÖä §[]\° stuff" <Foo@Bar.Net>', logger=self.config.logger)
+        self.assertEqual(address.name, 'Firstname stuff van der Lastname')
 
     def test_encodeAddress_address(self):
         self.milter.x_mail_domain = 'foo.bar.net'
@@ -109,7 +117,7 @@ class DMARCMilterTest(TestCase):
         mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>', logger=self.config.logger))
         self.assertEqual(mapping.name, "Baz Boo")
 
-    def test_encodeAddress_name_is_none(self):
+    def test_encodeAddress_mapping_name_is_none(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.config.resetDB()
