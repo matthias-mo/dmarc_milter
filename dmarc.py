@@ -102,7 +102,7 @@ class EmailAddress():
         if self.name:
             return '"' + self.name + '" <' + self.addr + '>'
         else:
-            self.addr
+            return self.addr
 
 
 class DMARCMilter(Milter.Base):
@@ -114,8 +114,6 @@ class DMARCMilter(Milter.Base):
     # encode an email address
     # expects that self.x_mail_domain and self.x_action_uuid is set
     # @param address pure email address used for encoding/lookup
-    # @param address_orig email address that might include the persons
-    #        name in a comment
     def encodeAddress(self, address):
         encoded_address = ''
         name            = None
@@ -195,22 +193,20 @@ class DMARCMilter(Milter.Base):
         if not address:
             mapping = self.encodeAddress(self.hdr_from)
             address = EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name, logger=self.config.logger)
-            #address = EmailAddress(logger=self.config.logger)
 
-        self.changeHdrFromAddress(address)
-
-    # change header "From" field
-    def changeHdrFromAddress(self, address):
+        # change header "From" field
         self.chgheader('From', 1, address.getNameAddress())
         self.hdr_from = address
 
         self.config.logger.debug("Changed header \"From\" to \"{0}\".".format(self.hdr_from.addr))
 
-    # change envelope "MAIL FROM" field when a return path is given
-    def changeEnvlpFromAddress(self, address):
-        self.chgfrom(address.addr)
-        self.envlp_from = address
-        self.config.logger.debug("Changed envelope \"From\" to \"{0}\".".format(address.addr))
+        # we changed the From mail address according to the "X-MAIL-DOMAIN" header:
+        # we need to change the envelope Return-Path to have the same domain
+        envlp_from = EmailAddress.fromData(address=self.config.return_paths[self.x_mail_domain], name=None, logger=self.config.logger)
+
+        self.chgfrom(envlp_from.addr)
+        self.envlp_from = envlp_from
+        self.config.logger.debug("Changed envelope \"From\" to \"{0}\".".format(envlp_from.addr))
 
     def __init__(self, config):
         self.is_internal_host = None
@@ -338,18 +334,18 @@ class DMARCMilter(Milter.Base):
                 self.chgheader('Sender', 1, None)
 
             else:
+                # we got mail from an external server; check if there is a
+                # mapping for the address in the "To:" field
                 mapping = self.getDecodedAddress(self.hdr_to.addr)
+                # if there is a mapping -> change the To field to the non
+                # encoded address
                 if mapping:
-                    new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name, logger=self.config.logger)
-
-                    self.changeMailToAddress(new_address)
                     self.x_mail_domain = self.hdr_to.getDomain()
                     self.x_action_uuid = mapping.action_uuid
-                    self.encodeHdrFromAddress()
 
-                    # we are forwarding mail: we need to change the envelope Return-Path.
-                    envlp_from = EmailAddress.fromData(address=self.config.return_paths[self.x_mail_domain], name=None, logger=self.config.logger)
-                    self.changeEnvlpFromAddress(envlp_from)
+                    new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name, logger=self.config.logger)
+                    self.changeMailToAddress(new_address)
+                    self.encodeHdrFromAddress()
 
                     self.chgheader('DKIM-Signature', 1, None)
 
