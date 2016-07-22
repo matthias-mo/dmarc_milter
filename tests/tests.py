@@ -92,146 +92,203 @@ class DMARCMilterTest(TestCase):
         self.config.resetDB()
 
     def test_encodeAddress_address(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='Foo@Bar.Net'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         match = re.match('^[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
         self.assertIsNotNone(match)
 
     def test_encodeAddress_address_with_name(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         match = re.match('^baz\.boo\.[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
         self.assertIsNotNone(match)
 
     def test_encodeAddress_name(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         self.assertEqual(mapping.name, "Baz Boo")
 
     def test_encodeAddress_mapping_name_is_none(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='Foo@Bar.Net'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         self.assertIsNone(mapping.name)
 
     def test_encodeAddress_peewee_encoded_addr(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        gen_mapping = self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net'))
+        gen_mapping = self.milter.encodeAddress(
+            EmailAddress(address='Foo@Bar.Net'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         get_mapping = AddrMapping.get(AddrMapping.encoded_addr == gen_mapping.encoded_addr)
         self.assertEqual(get_mapping.addr, 'foo@bar.net')
 
     def test_encodeAddress_peewee_addr(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        self.milter.encodeAddress(
+            EmailAddress(address='Foo@Bar.Net'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == x_action_uuid)
         self.assertIsNone(mapping.name)
 
     def test_encodeAddress_peewee_created(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='Foo@Bar.Net'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        self.milter.encodeAddress(
+            EmailAddress(address='Foo@Bar.Net'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == x_action_uuid)
         compare_time = int(time.time()) - 10
         self.assertGreater(mapping.created, compare_time)
 
     def test_encodeAddress_with_name_peewee_encoded_addr(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        gen_mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'))
+        gen_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
+            'foo.bar.net',
+            '9bed7305-8af0-42ff-adee-744657f73917',
+        )
         get_mapping = AddrMapping.get(AddrMapping.encoded_addr == gen_mapping.encoded_addr)
         self.assertEqual(get_mapping.addr, 'foo@bar.net')
 
     def test_encodeAddress_with_name_peewee_addr(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
+            'foo.bar.net',
+            x_action_uuid,
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == x_action_uuid)
         self.assertEqual(mapping.name, 'Baz Boo')
 
     def test_encodeAddress_with_name_peewee_created(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
+            'foo.bar.net',
+            x_action_uuid,
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == x_action_uuid)
         compare_time = int(time.time()) - 10
         self.assertGreater(mapping.created, compare_time)
 
     def test_encodeAddress_with_name_peewee_funky_addr(self):
-        self.milter.x_mail_domain = 'foo.bar.net'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
+            'foo.bar.net',
+            x_action_uuid,
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', AddrMapping.action_uuid == x_action_uuid)
         self.assertEqual(mapping.name, 'Baz Boo')
 
     def test_encodeAddress_with_name_peewee_funky_name(self):
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'))
-        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        self.milter.encodeAddress(
+            EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == x_action_uuid)
         self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
 
     def test_encodeAddress_with_name_peewee_funky_name2(self):
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"jasdf 8asdf"8asdfas 888" <Foo@Bar.Net>'))
+        self.milter.encodeAddress(
+            EmailAddress(address='"jasdf 8asdf"8asdfas 888" <Foo@Bar.Net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'jasdf 8asdf8asdfas 888')
 
     def test_getDecodedAddress_funky_encoded_addr(self):
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         decoded = self.milter.getDecodedAddress(mapping.encoded_addr)
         self.assertEqual(decoded.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
 
     def test_getEncodedAddressAndName_funky_addr(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        gen_mapping = self.milter.encodeAddress(EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'))
-        get_address = self.milter.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
+        gen_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        get_address = self.milter.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net', self.milter.x_action_uuid)
         self.assertEqual(get_address.addr, gen_mapping.encoded_addr)
 
     def test_getEncodedAddressAndName_funky_name(self):
         self.milter.x_mail_domain = 'foo.bar.net'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.encodeAddress(EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'))
-        mapping = self.milter.getEncodedAddressAndName('foo@bar.net')
+        self.milter.encodeAddress(
+            EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        mapping = self.milter.getEncodedAddressAndName('foo@bar.net', self.milter.x_action_uuid)
         self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
 
     def test_encodeHdrFromAddress_hdr_from_address_with_name(self):
-        self.milter.x_mail_domain = 'm.more-onion.com'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress()
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_mail_domain = 'm.more-onion.com'
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == x_action_uuid)
         self.assertEqual(self.milter.hdr_from.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
 
     def test_encodeHdrFromAddress_hdr_from_address_without_name(self):
-        self.milter.x_mail_domain = 'm.more-onion.com'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from = EmailAddress(address='aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG')
-        self.milter.encodeHdrFromAddress()
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.milter.x_action_uuid)
+        x_mail_domain = 'm.more-onion.com'
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        from_address = EmailAddress(address='aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG')
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == x_action_uuid)
         self.assertEqual(self.milter.hdr_from.getNameAddress(), mapping.encoded_addr)
 
     def test_encodeHdrFromAddress_hdr_from_domain_no_return_path(self):
-        self.milter.x_mail_domain = 'm.more-onion.com'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress()
+        x_mail_domain = 'm.more-onion.com'
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
         self.assertEqual(self.milter.hdr_from.getDomain(), 'm.more-onion.com')
 
     def test_encodeHdrFromAddress_return_path(self):
-        self.milter.x_mail_domain = 'm.more-onion.com'
-        self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        self.milter.hdr_from = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress()
+        x_mail_domain = 'm.more-onion.com'
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
         self.assertEqual(self.milter.envlp_from.getDomain(), 'm.more-onion.com')
+        
+    def test_encodeHdrFromAddress_2_times_same_from(self):
+        x_mail_domain = 'm.more-onion.com'
+        x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
+        from_address = EmailAddress(address='test@example.com')
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
 
     def test_hello_internal(self):
         self.milter.hello("localhost.localdomain")
@@ -616,7 +673,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         result = self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + mapping.name + '" <' + mapping.encoded_addr + '>',
@@ -628,7 +689,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_check_mapped_hdr_to(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + mapping.name + '" <' + mapping.encoded_addr + '>',
@@ -640,7 +705,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_check_mapped_envlp_to(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + mapping.name + '" <' + mapping.encoded_addr + '>',
@@ -652,7 +721,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_check_z1436_nr5(self):
         self.milter.x_mail_domain = 'action.openrightsgroup.org'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        mapping = self.milter.encodeAddress(EmailAddress(address='Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>'))
+        mapping = self.milter.encodeAddress(
+            EmailAddress(address='Stuart Fyfe <stuart.fyfe1@ntlworld.com <mailto:stuart.fyfe1@ntlworld.com>>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='GLEN, John <john.glen.mp@parliament.uk <mailto:john.glen.mp@parliament.uk>>',
             hdr_to='"' + mapping.name + '" <' + mapping.encoded_addr + '>',
@@ -668,8 +741,16 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_mapping(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
-        self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         result = self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',
@@ -681,8 +762,16 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_mapping_check_mapped_hdr_from(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
-        sender_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        sender_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',
@@ -694,8 +783,16 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_mapping_check_mapped_envlp_from(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
-        self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
+        self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',
@@ -710,7 +807,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_no_mapping(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         result = self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.other.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',
@@ -722,7 +823,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_no_mapping_check_hdr_from(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',
@@ -735,7 +840,11 @@ class DMARCMilterTest(TestCase):
     def test_eom_is_not_internal_hdr_to_has_mapping_hdr_from_has_no_mapping_check_envlp_from(self):
         self.milter.x_mail_domain = 'm.more-onion.com'
         self.milter.x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
-        recipient_mapping = self.milter.encodeAddress(EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'))
+        recipient_mapping = self.milter.encodeAddress(
+            EmailAddress(address='"Firstname Last Name" <Some.Supporter_Name@some.ADDRESS.net>'),
+            self.milter.x_mail_domain,
+            self.milter.x_action_uuid,
+        )
         self._prepare_eom(
             hdr_from='"Firstname Last Name" <Some.eXternal_person@some.ADDRESS.net>',
             hdr_to='"' + recipient_mapping.name + '" <' + recipient_mapping.encoded_addr + '>',

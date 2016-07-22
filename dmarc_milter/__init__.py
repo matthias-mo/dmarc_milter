@@ -114,7 +114,7 @@ class DMARCMilter(Milter.Base):
     # encode an email address
     # expects that self.x_mail_domain and self.x_action_uuid is set
     # @param address pure email address used for encoding/lookup
-    def encodeAddress(self, address):
+    def encodeAddress(self, address, x_mail_domain, x_action_uuid):
         encoded_address = ''
         name            = None
         mapping         = None
@@ -139,14 +139,14 @@ class DMARCMilter(Milter.Base):
                                              encoded_address)
 
         # build the rest of the encoded address with random string of 11 characters and the mail domain
-        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.x_mail_domain
+        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + x_mail_domain
 
         logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address.addr, encoded_address))
 
         return AddrMapping.create(
             encoded_addr=encoded_address,
             addr=address.addr,
-            action_uuid=self.x_action_uuid,
+            action_uuid=x_action_uuid,
             created=int(time.time()),
             name=address.name)
 
@@ -162,15 +162,15 @@ class DMARCMilter(Milter.Base):
         return mapping
 
     # expects that self.x_action_uuid is set
-    def getEncodedAddressAndName(self, address):
+    def getEncodedAddressAndName(self, address, x_action_uuid):
         mapping = None
         try:
-            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == self.x_action_uuid)
+            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == x_action_uuid)
             if mapping:
-                logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, self.x_action_uuid, mapping.encoded_addr, mapping.name))
+                logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, x_action_uuid, mapping.encoded_addr, mapping.name))
 
         except AddrMapping.DoesNotExist as excpt:
-            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, self.x_action_uuid))
+            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, x_action_uuid))
 
         if mapping:
             return EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name)
@@ -192,10 +192,10 @@ class DMARCMilter(Milter.Base):
 
     # take the existing header "From" field and encode it
     # expects that self.x_mail_domain and self.x_action_uuid is set
-    def encodeHdrFromAddress(self):
-        address = self.getEncodedAddressAndName(self.hdr_from.addr)
+    def encodeHdrFromAddress(self, from_address, x_mail_domain, x_action_uuid):
+        address = self.getEncodedAddressAndName(from_address.addr, x_action_uuid)
         if not address:
-            mapping = self.encodeAddress(self.hdr_from)
+            mapping = self.encodeAddress(from_address, x_mail_domain, x_action_uuid)
             address = EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name)
 
         # change header "From" field
@@ -206,7 +206,7 @@ class DMARCMilter(Milter.Base):
 
         # we changed the From mail address according to the "X-MAIL-DOMAIN" header:
         # we need to change the envelope Return-Path to have the same domain
-        envlp_from = EmailAddress.fromData(address=self.config.return_paths[self.x_mail_domain], name=None)
+        envlp_from = EmailAddress.fromData(address=self.config.return_paths[x_mail_domain], name=None)
 
         self.chgfrom(envlp_from.addr)
         self.envlp_from = envlp_from
@@ -323,7 +323,7 @@ class DMARCMilter(Milter.Base):
                         return Milter.TEMPFAIL
                     else:
                         
-                        self.encodeHdrFromAddress()
+                        self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid)
                         # remove auxiliary header fields
                         self.chgheader('X-Mail-Domain', 1, None)
                         self.chgheader('X-Action-UUID', 1, None)
@@ -350,7 +350,7 @@ class DMARCMilter(Milter.Base):
 
                     new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name)
                     self.changeMailToAddress(new_address)
-                    self.encodeHdrFromAddress()
+                    self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid)
 
                     self.chgheader('DKIM-Signature', 1, None)
 
