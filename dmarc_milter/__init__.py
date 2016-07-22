@@ -78,7 +78,6 @@ class EmailAddress():
 
         return addr
 
-
     def cleanSetAddrAndName(self, address):
         self.orig_addr = address
 
@@ -127,6 +126,38 @@ class EmailAddress():
         else:
             return self.addr
 
+    @staticmethod
+    def encodeName(name):
+        """ Turn name to some valid value for an (unquoted) local part. """
+        encoded_address = ''
+
+        # if we have the name of the person from the comment of the mail address,
+        # use it to extract first name + last name and try to build the encoded
+        # address as "firstname.lastname.randomstring@mail-domain.tld"
+        #  "firstname.lastname.randomstring" must not be longer than 64 characters
+        if name:
+            name_split = name.split(' ')
+            if name_split and len(name_split) > 0:
+                if len(name_split[0]) > 0 and len(name_split[0]) <= 52:
+                    # we got a first name, start building the encoded address
+                    encoded_address = name_split[0].lower() + "."
+                    last_name = "_".join(name_split[1:]).lower()
+                    if len(last_name) > 1 and len(encoded_address + last_name) <= 51:
+                        # we got a last name, add it to the encoded address
+                        encoded_address += last_name + "."
+                    # erase multiple dots
+                    encoded_address = re.sub(r'\.{2,}',
+                                             r'.',
+                                             encoded_address)
+        return encoded_address
+
+    def generateLocalAlias(self):
+        encoded_address = self.encodeName(self.name)
+        # The rest of the alias is a 11 character random string so the result
+        # is stochastically unique.
+        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11))
+        return encoded_address
+
 
 class AddressMapper(object):
     def __init__(self, domain, action_uuid):
@@ -142,31 +173,7 @@ class AddressMapper(object):
 
     def encodeAddress(self, address):
         """ Encode an email address and create a mapping in the database. """
-        encoded_address = ''
-        name            = None
-        mapping         = None
-
-        # if we have the name of the person from the comment of the mail address,
-        # use it to extract first name + last name and try to build the encoded
-        # address as "firstname.lastname.randomstring@mail-domain.tld"
-        #  "firstname.lastname.randomstring" must not be longer than 64 characters
-        if address.name and len(address.name) > 0:
-            name_split = address.name.split(' ')
-            if name_split and len(name_split) > 0:
-                if len(name_split[0]) > 0 and len(name_split[0]) <= 52:
-                    # we got a first name, start building the encoded address
-                    encoded_address = name_split[0].lower() + "."
-                    last_name  = "_".join(name_split[1:]).lower()
-                    if len(last_name) > 1 and len(encoded_address + last_name) <= 51:
-                        # we got a last name, add it to the encoded address
-                        encoded_address += last_name + "."
-                    # erase multiple dots
-                    encoded_address = re.sub(r'\.{2,}',
-                                             r'.',
-                                             encoded_address)
-
-        # build the rest of the encoded address with random string of 11 characters and the mail domain
-        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.domain
+        encoded_address = address.generateLocalAlias() + "@" + self.domain
 
         logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address.addr, encoded_address))
 

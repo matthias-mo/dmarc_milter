@@ -71,14 +71,28 @@ class CTX():
         self.quarantine_reason = reason
 
 
-class EmailAddresTest(TestCase):
-    def test_EmailAddress_name_is_none(self):
+class EmailAddressTest(TestCase):
+    def test_init_name_is_none(self):
         address = EmailAddress(address='Foo@Bar.Net')
         self.assertIsNone(address.name)
 
-    def test_EmailAddress_name_has_comma_and_illegal_chars(self):
+    def test_init_name_has_comma_and_illegal_chars(self):
         address = EmailAddress(address='"van der Lastname, Firstname, ßüÖä §[]\° stuff" <Foo@Bar.Net>')
         self.assertEqual(address.name, 'Firstname stuff van der Lastname')
+
+    def test_generateLocalAlias_without_name(self):
+        address = EmailAddress(address='Foo@Bar.Net')
+        match = re.match('^[a-z]{11}$', address.generateLocalAlias())
+        self.assertIsNotNone(match)
+
+    def test_generateLocalAlias_with_names(self):
+        address = EmailAddress(address='"Baz Boo" <Foo@Bar.Net>')
+        match = re.match('^baz\.boo\.[a-z]{11}$', address.generateLocalAlias())
+        self.assertIsNotNone(match)
+
+    def test_init_with_name(self):
+        address = EmailAddress(address='"Baz Boo" <Foo@Bar.Net>')
+        self.assertEqual(address.name, "Baz Boo")
 
 
 class AddressMapperTest(TestCase):
@@ -87,26 +101,6 @@ class AddressMapperTest(TestCase):
         init_logger(self.config)
         self.mapper = AddressMapper('foo.bar.net', '9bed7305-8af0-42ff-adee-744657f73917')
         self.config.resetDB()
-
-    def test_encodeAddress_address(self):
-        mapping = self.mapper.encodeAddress(
-            EmailAddress(address='Foo@Bar.Net'),
-        )
-        match = re.match('^[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
-        self.assertIsNotNone(match)
-
-    def test_encodeAddress_address_with_name(self):
-        mapping = self.mapper.encodeAddress(
-            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
-        )
-        match = re.match('^baz\.boo\.[a-z]{11}[@]foo\.bar\.net$', mapping.encoded_addr)
-        self.assertIsNotNone(match)
-
-    def test_encodeAddress_name(self):
-        mapping = self.mapper.encodeAddress(
-            EmailAddress(address='"Baz Boo" <Foo@Bar.Net>'),
-        )
-        self.assertEqual(mapping.name, "Baz Boo")
 
     def test_encodeAddress_mapping_name_is_none(self):
         mapping = self.mapper.encodeAddress(
