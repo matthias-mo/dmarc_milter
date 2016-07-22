@@ -45,6 +45,9 @@ class EmailAddress():
         if address:
             self.cleanSetAddrAndName(address)
 
+    @classmethod
+    def fromMapping(cls, mapping):
+        return cls.fromData(address=mapping.encoded_addr, name=mapping.name)
 
     @classmethod
     def fromData(cls, address, name):
@@ -105,16 +108,33 @@ class EmailAddress():
             return self.addr
 
 
-class DMARCMilter(Milter.Base):
+class AddressMapper(object):
+    def __init__(self, domain, action_uuid):
+        self.domain = domain
+        self.action_uuid = action_uuid
 
-    def log(self, *msg):
-        for message in msg:
-            logger.info(message)
+    def getAliasAddress(self, address):
+        """ Get stored alias for an address or create a new one. """
+        alias = self.getEncodedAddressAndName(address.addr)
+        if not alias:
+            mapping = self.encodeAddress(address)
+            alias = EmailAddress.fromMapping(mapping)
+        return alias
 
-    # encode an email address
-    # expects that self.x_mail_domain and self.x_action_uuid is set
-    # @param address pure email address used for encoding/lookup
-    def encodeAddress(self, address, x_mail_domain, x_action_uuid):
+    def getEncodedAddressAndName(self, address):
+        mapping = None
+        try:
+            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == self.action_uuid)
+            if mapping:
+                logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, self.action_uuid, mapping.encoded_addr, mapping.name))
+
+        except AddrMapping.DoesNotExist as excpt:
+            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, self.action_uuid))
+
+        return EmailAddress.fromMapping(mapping) if mapping else None
+
+    def encodeAddress(self, address):
+        """ Encode an email address and create a mapping in the database. """
         encoded_address = ''
         name            = None
         mapping         = None
@@ -139,16 +159,27 @@ class DMARCMilter(Milter.Base):
                                              encoded_address)
 
         # build the rest of the encoded address with random string of 11 characters and the mail domain
-        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + x_mail_domain
+        encoded_address += ''.join(random.choice(string.ascii_lowercase) for i in range(11)) + "@" + self.domain
 
         logger.debug("Inserting new encoded address in DB: original address \"{0}\", encoded address \"{1}\".".format(address.addr, encoded_address))
 
         return AddrMapping.create(
             encoded_addr=encoded_address,
             addr=address.addr,
-            action_uuid=x_action_uuid,
+            action_uuid=self.action_uuid,
             created=int(time.time()),
             name=address.name)
+
+    def getOriginalAddress(self, address):
+        pass
+
+
+class DMARCMilter(Milter.Base):
+
+    def log(self, *msg):
+        for message in msg:
+            logger.info(message)
+
 
     def getDecodedAddress(self, address):
         mapping = None
@@ -160,23 +191,6 @@ class DMARCMilter(Milter.Base):
             logger.debug("Encoded address \"{0}\" wasn't found in lookup table.".format(address))
 
         return mapping
-
-    # expects that self.x_action_uuid is set
-    def getEncodedAddressAndName(self, address, x_action_uuid):
-        mapping = None
-        try:
-            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == x_action_uuid)
-            if mapping:
-                logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, x_action_uuid, mapping.encoded_addr, mapping.name))
-
-        except AddrMapping.DoesNotExist as excpt:
-            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, x_action_uuid))
-
-        if mapping:
-            return EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name)
-        else:
-            return None
-
 
     # change header and envelope "To" fields
     def changeMailToAddress(self, address):
@@ -201,15 +215,6 @@ class DMARCMilter(Milter.Base):
         self.chgfrom(envlp_from.addr)
         self.envlp_from = envlp_from
         logger.debug("Changed envelope \"From\" to \"{0}\".".format(envlp_from.addr))
-
-    # take the existing header "From" field and encode it
-    # expects that self.x_mail_domain and self.x_action_uuid is set
-    def encodeHdrFromAddress(self, from_address, x_mail_domain, x_action_uuid):
-        address = self.getEncodedAddressAndName(from_address.addr, x_action_uuid)
-        if not address:
-            mapping = self.encodeAddress(from_address, x_mail_domain, x_action_uuid)
-            address = EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name)
-        return address
 
     def __init__(self, config):
         self.is_internal_host = None
@@ -321,8 +326,8 @@ class DMARCMilter(Milter.Base):
                         logger.warning("Domain from \"X-Mail-Domain\" = \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.x_mail_domain))
                         return Milter.TEMPFAIL
                     else:
-                        
-                        self.setFrom(self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid))
+                        mapper = AddressMapper(self.x_mail_domain, self.x_action_uuid)
+                        self.setFrom(mapper.getAliasAddress(self.hdr_from))
                         # remove auxiliary header fields
                         self.chgheader('X-Mail-Domain', 1, None)
                         self.chgheader('X-Action-UUID', 1, None)
@@ -349,7 +354,9 @@ class DMARCMilter(Milter.Base):
 
                     new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name)
                     self.changeMailToAddress(new_address)
-                    self.setFrom(self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid))
+
+                    mapper = AddressMapper(self.x_mail_domain, self.x_action_uuid)
+                    self.setFrom(mapper.getAliasAddress(self.hdr_from))
 
                     self.chgheader('DKIM-Signature', 1, None)
 
