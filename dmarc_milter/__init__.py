@@ -177,20 +177,6 @@ class AddressMapper(object):
             created=int(time.time()),
             name=address.name)
 
-    def getOriginalAddress(self, alias):
-        pass
-
-    def getMappingByAlias(self, alias):
-        mapping = None
-        try:
-            mapping = AddrMapping.get(AddrMapping.encoded_addr == alias.addr)
-            if mapping:
-                logger.debug("Looked up alias \"{0}\", found \"{1}\".".format(alias.addr, mapping.addr))
-        except AddrMapping.DoesNotExist as excpt:
-            logger.debug("Encoded alias \"{0}\" wasn't found in lookup table.".format(alias.addr))
-
-        return mapping
-
 
 class DMARCMilter(Milter.Base):
 
