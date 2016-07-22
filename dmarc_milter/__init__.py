@@ -469,13 +469,13 @@ def getConfig():
 
 
 def init_logger(config):
-  """ Configure the global logger object. """
-  logger.setLevel(config.log_level)
+    """ Configure the global logger object. """
+    logger.setLevel(config.log_level)
 
-  handler = logging.handlers.SysLogHandler(address='/dev/log', facility=logging.handlers.SysLogHandler.LOG_MAIL)
-  formatter = logging.Formatter("%(asctime)s %(filename)s[%(process)d]: %(message)s", "%b %d %H:%M:%S")
-  handler.setFormatter(formatter)
-  logger.addHandler(handler)
+    handler = logging.handlers.SysLogHandler(address='/dev/log', facility=logging.handlers.SysLogHandler.LOG_MAIL)
+    formatter = logging.Formatter("%(asctime)s %(filename)s[%(process)d]: %(message)s", "%b %d %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 def main():
