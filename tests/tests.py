@@ -2,14 +2,11 @@
 
 from unittest import TestCase
 import logging
-import logging.handlers
 import re
 import time
-import string
-import random
 
 import Milter
-from peewee import *
+from peewee import SqliteDatabase
 
 from dmarc_milter import init_logger, DMARCMilter, AddrMapping, db_proxy, EmailAddress, AddressMapper
 
