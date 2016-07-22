@@ -34,6 +34,16 @@ class AddrMapping(Model):
         db_table    = 'email_address_mapping'
         primary_key = CompositeKey('addr', 'action_uuid')
 
+    @classmethod
+    def byAlias(cls, alias):
+        try:
+            mapping = cls.get(cls.encoded_addr == alias.addr)
+            logger.debug("Looked up address \"{0}\", found \"{1}\".".format(alias.addr, mapping.addr))
+            return mapping
+        except AddrMapping.DoesNotExist as excpt:
+            logger.debug("Encoded address \"{0}\" wasn't found in lookup table.".format(alias.addr))
+        return None
+
 
 class EmailAddress():
 
@@ -170,27 +180,22 @@ class AddressMapper(object):
             created=int(time.time()),
             name=address.name)
 
-    def getOriginalAddress(self, address):
+    def getOriginalAddress(self, alias):
         pass
+
+    def getMappingByAlias(self, alias):
+        mapping = None
+        try:
+            mapping = AddrMapping.get(AddrMapping.encoded_addr == alias.addr)
+            if mapping:
+                logger.debug("Looked up alias \"{0}\", found \"{1}\".".format(alias.addr, mapping.addr))
+        except AddrMapping.DoesNotExist as excpt:
+            logger.debug("Encoded alias \"{0}\" wasn't found in lookup table.".format(alias.addr))
+
+        return mapping
 
 
 class DMARCMilter(Milter.Base):
-
-    def log(self, *msg):
-        for message in msg:
-            logger.info(message)
-
-
-    def getDecodedAddress(self, address):
-        mapping = None
-        try:
-            mapping = AddrMapping.get(AddrMapping.encoded_addr == address)
-            if mapping:
-                logger.debug("Looked up address \"{0}\", found \"{1}\".".format(address, mapping.addr))
-        except AddrMapping.DoesNotExist as excpt:
-            logger.debug("Encoded address \"{0}\" wasn't found in lookup table.".format(address))
-
-        return mapping
 
     # change header and envelope "To" fields
     def changeMailToAddress(self, address):
@@ -345,7 +350,7 @@ class DMARCMilter(Milter.Base):
             else:
                 # we got mail from an external server; check if there is a
                 # mapping for the address in the "To:" field
-                mapping = self.getDecodedAddress(self.hdr_to.addr)
+                mapping = AddrMapping.byAlias(self.hdr_to)
                 # if there is a mapping -> change the To field to the non
                 # encoded address
                 if mapping:

@@ -181,6 +181,49 @@ class AddressMapperTest(TestCase):
         mapping = AddrMapping.get(AddrMapping.addr == 'foo@bar.net', AddrMapping.action_uuid == self.mapper.action_uuid)
         self.assertEqual(mapping.name, 'jasdf 8asdf8asdfas 888')
 
+    def test_getDecodedAddress_funky_encoded_addr(self):
+        mapping = self.mapper.encodeAddress(
+            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
+        )
+        decoded = AddrMapping.byAlias(EmailAddress(address=mapping.encoded_addr))
+        self.assertEqual(decoded.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
+
+    def test_getEncodedAddressAndName_funky_addr(self):
+        gen_mapping = self.mapper.encodeAddress(
+            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
+        )
+        get_address = self.mapper.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
+        self.assertEqual(get_address.addr, gen_mapping.encoded_addr)
+
+    def test_getEncodedAddressAndName_funky_name(self):
+        self.mapper.encodeAddress(
+            EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'),
+        )
+        mapping = self.mapper.getEncodedAddressAndName('foo@bar.net')
+        self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
+
+    def test_getAliasAddress_hdr_from_address_with_name(self):
+        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
+        new_address = self.mapper.getAliasAddress(from_address)
+        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.mapper.action_uuid)
+        self.assertEqual(new_address.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
+
+    def test_getAliasAddress_hdr_from_address_without_name(self):
+        from_address = EmailAddress(address='aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG')
+        new_address = self.mapper.getAliasAddress(from_address)
+        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == self.mapper.action_uuid)
+        self.assertEqual(new_address.getNameAddress(), mapping.encoded_addr)
+
+    def test_getAliasAddress_hdr_from_domain_no_return_path(self):
+        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
+        new_address = self.mapper.getAliasAddress(from_address)
+        self.assertEqual(new_address.getDomain(), 'foo.bar.net')
+
+    def test_getAliasAddress_2_times_same_from(self):
+        from_address = EmailAddress(address='test@example.com')
+        self.mapper.getAliasAddress(from_address)
+        self.mapper.getAliasAddress(from_address)
+
 
 class DMARCMilterTest(TestCase):
 
@@ -192,50 +235,6 @@ class DMARCMilterTest(TestCase):
         self.milter._ctx = CTX()
         self.config.resetDB()
 
-    def test_getDecodedAddress_funky_encoded_addr(self):
-        mapper = AddressMapper('foo.bar.net', '9bed7305-8af0-42ff-adee-744657f73917')
-        mapping = mapper.encodeAddress(
-            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
-        )
-        decoded = self.milter.getDecodedAddress(mapping.encoded_addr)
-        self.assertEqual(decoded.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
-
-    def test_getEncodedAddressAndName_funky_addr(self):
-        mapper = AddressMapper('foo.bar.net', '9bed7305-8af0-42ff-adee-744657f73917')
-        gen_mapping = mapper.encodeAddress(
-            EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
-        )
-        get_address = mapper.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
-        self.assertEqual(get_address.addr, gen_mapping.encoded_addr)
-
-    def test_getEncodedAddressAndName_funky_name(self):
-        mapper = AddressMapper('foo.bar.net', '9bed7305-8af0-42ff-adee-744657f73917')
-        mapper.encodeAddress(
-            EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'),
-        )
-        mapping = mapper.getEncodedAddressAndName('foo@bar.net')
-        self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
-
-    def test_getAliasAddress_hdr_from_address_with_name(self):
-        mapper = AddressMapper('m.more-onion.com', '9bed7305-8af0-42ff-adee-744657f73917')
-        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        new_address = mapper.getAliasAddress(from_address)
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == mapper.action_uuid)
-        self.assertEqual(new_address.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
-
-    def test_getAliasAddress_hdr_from_address_without_name(self):
-        mapper = AddressMapper('m.more-onion.com', '9bed7305-8af0-42ff-adee-744657f73917')
-        from_address = EmailAddress(address='aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG')
-        new_address = mapper.getAliasAddress(from_address)
-        mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == mapper.action_uuid)
-        self.assertEqual(new_address.getNameAddress(), mapping.encoded_addr)
-
-    def test_getAliasAddress_hdr_from_domain_no_return_path(self):
-        mapper = AddressMapper('m.more-onion.com', '9bed7305-8af0-42ff-adee-744657f73917')
-        from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        new_address = mapper.getAliasAddress(from_address)
-        self.assertEqual(new_address.getDomain(), 'm.more-onion.com')
-
     def test_getAliasAddress_return_path(self):
         mapper = AddressMapper('m.more-onion.com', '9bed7305-8af0-42ff-adee-744657f73917')
         from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
@@ -243,12 +242,6 @@ class DMARCMilterTest(TestCase):
         self.milter.x_mail_domain = mapper.domain
         self.milter.setFrom(new_address)
         self.assertEqual(self.milter.envlp_from.getDomain(), 'm.more-onion.com')
-
-    def test_getAliasAddress_2_times_same_from(self):
-        mapper = AddressMapper('m.more-onion.com', '9bed7305-8af0-42ff-adee-744657f73917')
-        from_address = EmailAddress(address='test@example.com')
-        mapper.getAliasAddress(from_address)
-        mapper.getAliasAddress(from_address)
 
     def test_hello_internal(self):
         self.milter.hello("localhost.localdomain")
