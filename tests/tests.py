@@ -188,18 +188,18 @@ class AddressMapperTest(TestCase):
         decoded = AddrMapping.byAlias(EmailAddress(address=mapping.encoded_addr))
         self.assertEqual(decoded.addr, 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
 
-    def test_getEncodedAddressAndName_funky_addr(self):
+    def test_AddrMapping_byAddressAndAction_funky_addr(self):
         gen_mapping = self.mapper.encodeAddress(
             EmailAddress(address='"Baz Boo" <ASDd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@Bar.Net>'),
         )
-        get_address = self.mapper.getEncodedAddressAndName('asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net')
-        self.assertEqual(get_address.addr, gen_mapping.encoded_addr)
+        mapping = AddrMapping.byAddressAndAction(EmailAddress(address='asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bar.net'), self.mapper.action_uuid)
+        self.assertEqual(mapping.encoded_addr, gen_mapping.encoded_addr)
 
-    def test_getEncodedAddressAndName_funky_name(self):
+    def test_AddrMapping_byAddressAndAction_funky_name(self):
         self.mapper.encodeAddress(
             EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <Foo@Bar.Net>'),
         )
-        mapping = self.mapper.getEncodedAddressAndName('foo@bar.net')
+        mapping = AddrMapping.byAddressAndAction(EmailAddress(address='foo@bar.net'), self.mapper.action_uuid)
         self.assertEqual(mapping.name, 'jasdf 2351&16134%$!^o[asd}')
 
     def test_getAliasAddress_hdr_from_address_with_name(self):

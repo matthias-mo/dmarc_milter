@@ -44,6 +44,16 @@ class AddrMapping(Model):
             logger.debug("Encoded address \"{0}\" wasn't found in lookup table.".format(alias.addr))
         return None
 
+    @classmethod
+    def byAddressAndAction(cls, address, action_uuid):
+        try:
+            mapping = AddrMapping.get(AddrMapping.addr == address.addr, AddrMapping.action_uuid == action_uuid)
+            logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address.addr, action_uuid, mapping.encoded_addr, mapping.name))
+            return mapping
+        except AddrMapping.DoesNotExist as excpt:
+            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address.addr, action_uuid))
+        return None
+
 
 class EmailAddress():
 
@@ -125,23 +135,10 @@ class AddressMapper(object):
 
     def getAliasAddress(self, address):
         """ Get stored alias for an address or create a new one. """
-        alias = self.getEncodedAddressAndName(address.addr)
-        if not alias:
+        mapping = AddrMapping.byAddressAndAction(address, self.action_uuid)
+        if not mapping:
             mapping = self.encodeAddress(address)
-            alias = EmailAddress.fromMapping(mapping)
-        return alias
-
-    def getEncodedAddressAndName(self, address):
-        mapping = None
-        try:
-            mapping = AddrMapping.get(AddrMapping.addr == address, AddrMapping.action_uuid == self.action_uuid)
-            if mapping:
-                logger.debug("Looked up address \"{0}\", action UUID \"{1}\", found address \"{2}\" and name \"{3}\".".format(address, self.action_uuid, mapping.encoded_addr, mapping.name))
-
-        except AddrMapping.DoesNotExist as excpt:
-            logger.debug("Address \"{0}\", action UUID \"{1}\" wasn't found in lookup table.".format(address, self.action_uuid))
-
-        return EmailAddress.fromMapping(mapping) if mapping else None
+        return EmailAddress.fromMapping(mapping)
 
     def encodeAddress(self, address):
         """ Encode an email address and create a mapping in the database. """
