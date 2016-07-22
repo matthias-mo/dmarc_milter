@@ -190,6 +190,18 @@ class DMARCMilter(Milter.Base):
 
         logger.debug("Changed header \"To\" address to \"{0}\", changed envelope \"To\" address to \"{1}\".".format(addr, address.addr))
 
+    def setFrom(self, address):
+        self.chgheader('From', 1, address.getNameAddress())
+        self.hdr_from = address
+        logger.debug("Changed header \"From\" to \"{0}\".".format(self.hdr_from.addr))
+
+        # we changed the From mail address according to the "X-MAIL-DOMAIN" header:
+        # we need to change the envelope Return-Path to have the same domain
+        envlp_from = EmailAddress.fromData(address=self.config.return_paths[self.x_mail_domain], name=None)
+        self.chgfrom(envlp_from.addr)
+        self.envlp_from = envlp_from
+        logger.debug("Changed envelope \"From\" to \"{0}\".".format(envlp_from.addr))
+
     # take the existing header "From" field and encode it
     # expects that self.x_mail_domain and self.x_action_uuid is set
     def encodeHdrFromAddress(self, from_address, x_mail_domain, x_action_uuid):
@@ -197,20 +209,7 @@ class DMARCMilter(Milter.Base):
         if not address:
             mapping = self.encodeAddress(from_address, x_mail_domain, x_action_uuid)
             address = EmailAddress.fromData(address=mapping.encoded_addr, name=mapping.name)
-
-        # change header "From" field
-        self.chgheader('From', 1, address.getNameAddress())
-        self.hdr_from = address
-
-        logger.debug("Changed header \"From\" to \"{0}\".".format(self.hdr_from.addr))
-
-        # we changed the From mail address according to the "X-MAIL-DOMAIN" header:
-        # we need to change the envelope Return-Path to have the same domain
-        envlp_from = EmailAddress.fromData(address=self.config.return_paths[x_mail_domain], name=None)
-
-        self.chgfrom(envlp_from.addr)
-        self.envlp_from = envlp_from
-        logger.debug("Changed envelope \"From\" to \"{0}\".".format(envlp_from.addr))
+        return address
 
     def __init__(self, config):
         self.is_internal_host = None
@@ -323,7 +322,7 @@ class DMARCMilter(Milter.Base):
                         return Milter.TEMPFAIL
                     else:
                         
-                        self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid)
+                        self.setFrom(self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid))
                         # remove auxiliary header fields
                         self.chgheader('X-Mail-Domain', 1, None)
                         self.chgheader('X-Action-UUID', 1, None)
@@ -350,7 +349,7 @@ class DMARCMilter(Milter.Base):
 
                     new_address = EmailAddress.fromData(address=mapping.addr, name=mapping.name)
                     self.changeMailToAddress(new_address)
-                    self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid)
+                    self.setFrom(self.encodeHdrFromAddress(self.hdr_from, self.x_mail_domain, self.x_action_uuid))
 
                     self.chgheader('DKIM-Signature', 1, None)
 

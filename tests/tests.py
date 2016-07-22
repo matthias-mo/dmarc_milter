@@ -257,30 +257,32 @@ class DMARCMilterTest(TestCase):
         x_mail_domain = 'm.more-onion.com'
         x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        new_address = self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
         mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == x_action_uuid)
-        self.assertEqual(self.milter.hdr_from.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
+        self.assertEqual(new_address.getNameAddress(), '"' + mapping.name + '" <' + mapping.encoded_addr + '>')
 
     def test_encodeHdrFromAddress_hdr_from_address_without_name(self):
         x_mail_domain = 'm.more-onion.com'
         x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         from_address = EmailAddress(address='aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG')
-        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        new_address = self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
         mapping = AddrMapping.get(AddrMapping.addr == 'asdd..!#$%&a*k+asd-wq/q=p?a^u{i}p~f|38@bak.org', AddrMapping.action_uuid == x_action_uuid)
-        self.assertEqual(self.milter.hdr_from.getNameAddress(), mapping.encoded_addr)
+        self.assertEqual(new_address.getNameAddress(), mapping.encoded_addr)
 
     def test_encodeHdrFromAddress_hdr_from_domain_no_return_path(self):
         x_mail_domain = 'm.more-onion.com'
         x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
-        self.assertEqual(self.milter.hdr_from.getDomain(), 'm.more-onion.com')
+        new_address = self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        self.assertEqual(new_address.getDomain(), 'm.more-onion.com')
 
     def test_encodeHdrFromAddress_return_path(self):
         x_mail_domain = 'm.more-onion.com'
         x_action_uuid = '9bed7305-8af0-42ff-adee-744657f73917'
         from_address = EmailAddress(address='"jasdf 235"1&16134%$!^o"[asd} <aSdd..!#$%&a*k+asd-WQ/q=p?a^u{i}p~f|38@baK.ORG>')
-        self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        new_address = self.milter.encodeHdrFromAddress(from_address, x_mail_domain, x_action_uuid)
+        self.milter.x_mail_domain = x_mail_domain
+        self.milter.setFrom(new_address)
         self.assertEqual(self.milter.envlp_from.getDomain(), 'm.more-onion.com')
         
     def test_encodeHdrFromAddress_2_times_same_from(self):
