@@ -71,6 +71,16 @@ class CTX():
         self.quarantine_reason = reason
 
 
+class EmailAddresTest(TestCase):
+    def test_EmailAddress_name_is_none(self):
+        address = EmailAddress(address='Foo@Bar.Net')
+        self.assertIsNone(address.name)
+
+    def test_EmailAddress_name_has_comma_and_illegal_chars(self):
+        address = EmailAddress(address='"van der Lastname, Firstname, ßüÖä §[]\° stuff" <Foo@Bar.Net>')
+        self.assertEqual(address.name, 'Firstname stuff van der Lastname')
+
+
 class DMARCMilterTest(TestCase):
 
     def setUp(self):
@@ -80,14 +90,6 @@ class DMARCMilterTest(TestCase):
         self.milter._actions = Milter.QUARANTINE | Milter.CHGHDRS | Milter.DELRCPT | Milter.ADDRCPT | Milter.CHGFROM
         self.milter._ctx = CTX()
         self.config.resetDB()
-
-    def test_EmailAddress_name_is_none(self):
-        address = EmailAddress(address='Foo@Bar.Net')
-        self.assertIsNone(address.name)
-
-    def test_EmailAddress_name_has_comma_and_illegal_chars(self):
-        address = EmailAddress(address='"van der Lastname, Firstname, ßüÖä §[]\° stuff" <Foo@Bar.Net>')
-        self.assertEqual(address.name, 'Firstname stuff van der Lastname')
 
     def test_encodeAddress_address(self):
         self.milter.x_mail_domain = 'foo.bar.net'
