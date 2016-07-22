@@ -11,7 +11,7 @@ import random
 import Milter
 from peewee import *
 
-from dmarc import DMARCMilter, AddrMapping, db_proxy, EmailAddress
+from dmarc_milter import DMARCMilter, AddrMapping, db_proxy, EmailAddress
 
 class Config():
     def __init__(self):

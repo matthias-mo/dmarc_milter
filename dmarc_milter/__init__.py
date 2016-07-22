@@ -322,6 +322,7 @@ class DMARCMilter(Milter.Base):
                         self.config.logger.warning("Domain from \"X-Mail-Domain\" = \"{0}\" is not one of the hosted domains. Mail is quarantined!".format(self.x_mail_domain))
                         return Milter.TEMPFAIL
                     else:
+                        
                         self.encodeHdrFromAddress()
                         # remove auxiliary header fields
                         self.chgheader('X-Mail-Domain', 1, None)
@@ -445,7 +446,7 @@ def getConfig():
                 for i in range(len(list_from_file)):
                     var.append(str.strip(list_from_file[i]))
             except IOError as excpt:
-                print "I/O error({0}): {1}".format(excpt.errno, excpt.strerror)
+                print("I/O error({0}): {1}".format(excpt.errno, excpt.strerror))
                 exit(1)
         return var
 
@@ -459,7 +460,7 @@ def getConfig():
                     domain, return_path = line.partition(":")[::2]
                     return_paths[domain.strip()] = return_path.strip()
         except IOError as excpt:
-            print "I/O error({0}): {1}".format(excpt.errno, excpt.strerror)
+            print("I/O error({0}): {1}".format(excpt.errno, excpt.strerror))
             exit(1)
         config.return_paths = return_paths
 
